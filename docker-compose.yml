@@ -1,0 +1,108 @@
+version: "3.8"
+
+services:
+  # PostgreSQL with TimescaleDB
+  postgres:
+    image: timescale/timescaledb:latest-pg14
+    container_name: f1_postgres
+    environment:
+      POSTGRES_USER: f1user
+      POSTGRES_PASSWORD: f1password
+      POSTGRES_DB: f1_intelligence_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/schemas.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - f1_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U f1user -d f1_intelligence_hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: f1_backend
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      DATABASE_URL: postgresql://f1user:f1password@postgres:5432/f1_intelligence_hub
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: f1_intelligence_hub
+      DB_USER: f1user
+      DB_PASSWORD: f1password
+      FASTF1_CACHE_DIR: /app/fastf1_cache
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./fastf1_cache:/app/fastf1_cache
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - f1_network
+
+  # Data loader — fully self-contained; no local Python or conda needed.
+  # Build:  docker compose build loader
+  # Run:    docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync
+  loader:
+    build:
+      context: .
+      dockerfile: Dockerfile.loader
+    container_name: f1_loader
+    environment:
+      DATABASE_URL: postgresql://f1user:f1password@postgres:5432/f1_intelligence_hub
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: f1_intelligence_hub
+      DB_USER: f1user
+      DB_PASSWORD: f1password
+      FASTF1_CACHE_DIR: /app/fastf1_cache
+    volumes:
+      # FastF1 session cache — persists between runs so data isn't re-downloaded
+      - ./fastf1_cache:/app/fastf1_cache
+      # Circuit coordinate JSON files written back to the frontend's public dir
+      - ./frontend/public/circuits:/app/frontend/public/circuits
+      # circuitLayouts.ts written back to the frontend's lib dir
+      - ./frontend/src/lib:/app/frontend/src/lib
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - f1_network
+    profiles:
+      - tools
+
+  # Next.js Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: f1_frontend
+    command: npm run dev
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - backend
+    networks:
+      - f1_network
+
+volumes:
+  postgres_data:
+
+networks:
+  f1_network:
+    driver: bridge

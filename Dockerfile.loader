@@ -1,0 +1,37 @@
+# ── F1 Intelligence Hub — Data Loader Image ───────────────────────────────────
+# Self-contained image for running initial_data_load.py inside Docker.
+# No local Python, conda, or Node installation required on the host.
+#
+# Build:  docker compose build loader
+# Run:    docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync
+# ──────────────────────────────────────────────────────────────────────────────
+
+FROM python:3.12-slim
+
+# Build tools needed by numpy / scikit-learn / psycopg2
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Install Python dependencies (fastf1, sqlalchemy, pandas, numpy, etc.)
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy backend package (imported by the scripts)
+COPY backend/ ./backend/
+
+# Copy data-loading scripts
+COPY scripts/ ./scripts/
+
+# Create output directories that will be bind-mounted at runtime
+RUN mkdir -p frontend/public/circuits frontend/src/lib
+
+# Allow scripts to import from the backend package
+ENV PYTHONPATH=/app/backend
+
+# Default: print usage (override with the actual command at runtime)
+CMD ["python", "scripts/initial_data_load.py", "--help"]
