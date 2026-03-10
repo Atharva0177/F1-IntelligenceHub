@@ -1,4 +1,4 @@
-# F1 Intelligence Hub — New Device Setup
+﻿# F1 Intelligence Hub — New Device Setup
 # Run once after cloning: .\setup.ps1
 # Requires: Docker Desktop (nothing else — no Python, conda, or Node needed)
 

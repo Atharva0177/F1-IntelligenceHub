@@ -1,4 +1,4 @@
-# F1 Intelligence Hub — Database Restore
+﻿# F1 Intelligence Hub — Database Restore
 # Restores backups\f1_dump.sql into the running Postgres container
 # Run from the project root: .\scripts\restore.ps1
 # Optionally pass a specific file: .\scripts\restore.ps1 -File backups\f1_dump_2026-03-10.sql

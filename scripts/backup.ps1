@@ -1,4 +1,4 @@
-# F1 Intelligence Hub — Database Backup
+﻿# F1 Intelligence Hub — Database Backup
 # Dumps the running Postgres container to backups\f1_dump.sql
 # Run from the project root: .\scripts\backup.ps1
 
