@@ -44,7 +44,7 @@ fastf1_cache/
 .fastf1_cache/
 
 # Database backups (transfer separately, do not commit)
-backups/
+# backups/
 
 # Conda environment (local, re-creatable)
 .conda/
