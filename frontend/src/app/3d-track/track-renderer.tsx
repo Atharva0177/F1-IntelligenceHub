@@ -199,7 +199,7 @@ export function renderRealisticTrack(
       });
       const square = new THREE.Mesh(squareGeometry, squareMaterial);
       square.position.copy(startPoint);
-      square.position.add(perpend perpendicular.clone().multiplyScalar((i - numSquares / 2) * squareSize));
+      square.position.add(perpendicular.clone().multiplyScalar((i - numSquares / 2) * squareSize));
       square.position.add(direction.clone().multiplyScalar((j - 0.5) * squareSize));
       square.position.y = 3;
       scene.add(square);

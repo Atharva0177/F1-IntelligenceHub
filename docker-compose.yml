@@ -37,7 +37,7 @@ services:
       DB_USER: f1user
       DB_PASSWORD: f1password
       FASTF1_CACHE_DIR: /app/fastf1_cache
-      CORS_ORIGINS: http://localhost:3000
+      CORS_ORIGINS: "http://localhost:3000,https://repressively-faintish-helen.ngrok-free.dev,https://f1hub.freeddns.org"
     ports:
       - "8000:8000"
     volumes:
@@ -86,19 +86,33 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: f1_frontend
-    command: npm run dev
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      BACKEND_URL: http://backend:8000
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     depends_on:
       - backend
     networks:
       - f1_network
+
+  # Persistent public tunnel via ngrok.
+  # 1. Sign up free at https://ngrok.com
+  # 2. Get your authtoken from https://dashboard.ngrok.com/get-started/your-authtoken
+  # 3. Claim a free static domain at https://dashboard.ngrok.com/cloud-edge/domains
+  # 4. Replace the values below and run: docker compose up -d
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: f1_ngrok
+    command: http --url=repressively-faintish-helen.ngrok-free.dev --request-header-add="ngrok-skip-browser-warning:1" frontend:3000
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+    ports:
+      - "4040:4040"
+    depends_on:
+      - frontend
+    networks:
+      - f1_network
+    restart: unless-stopped
 
 volumes:
   postgres_data:

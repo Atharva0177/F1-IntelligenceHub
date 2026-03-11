@@ -79,7 +79,7 @@ export default function RaceDetailPage() {
   const [telemetryData2, setTelemetryData2] = useState<any[]>([]);
   const [loadingTelemetry, setLoadingTelemetry] = useState(false);
   const [selectedTelemetryLap, setSelectedTelemetryLap] = useState<"fastest" | number>("fastest");
-  const [circuitCoords, setCircuitCoords] = useState<{ x: number[]; y: number[] } | null>(null);
+  const [circuitCoords, setCircuitCoords] = useState<{ x: number[]; y: number[]; rotation?: number } | null>(null);
   const [dominanceSubTab, setDominanceSubTab] = useState<
     "overview" | "speed" | "throttle" | "rpm"
   >("overview");
@@ -119,7 +119,7 @@ export default function RaceDetailPage() {
           const res = await fetch(`/circuits/${circuitFile}`);
           if (res.ok) {
             const circuitData = await res.json();
-            setCircuitCoords({ x: circuitData.x, y: circuitData.y });
+            setCircuitCoords({ x: circuitData.x, y: circuitData.y, rotation: circuitData.rotation ?? 0 });
           }
         } catch (_) { /* silently fall back to telemetry */ }
 
@@ -1640,8 +1640,8 @@ export default function RaceDetailPage() {
                     return (
                       <div>
                         {/* Lap ruler */}
-                        <div className="flex items-end gap-3 mb-2 select-none">
-                          <div className="w-16 flex-shrink-0" />
+                        <div className="flex items-end gap-2 mb-2 select-none">
+                          <div className="w-8 flex-shrink-0" />
                           <div className="flex-1 relative h-5">
                             {ticks.map((lap) => (
                               <div
@@ -1685,14 +1685,11 @@ export default function RaceDetailPage() {
                             return (
                               <div
                                 key={driver.driver_code}
-                                className="flex items-center gap-3"
+                                className="flex items-center gap-2"
                               >
                                 {/* Driver label */}
-                                <div className="w-16 flex-shrink-0 flex items-center justify-end gap-1">
-                                  <span className="text-[10px] text-gray-600 font-mono">
-                                    P{index + 1}
-                                  </span>
-                                  <span className="text-sm font-bold text-white font-mono">
+                                <div className="w-8 flex-shrink-0 flex items-center justify-end">
+                                  <span className="text-xs font-bold text-white font-mono">
                                     {driver.driver_code}
                                   </span>
                                 </div>
@@ -2061,53 +2058,42 @@ export default function RaceDetailPage() {
       {activeTab === "laps" && (
         <div className="space-y-4">
           <div className="bg-carbon-800 rounded-lg border border-carbon-700 overflow-hidden">
-            <div className="px-6 py-4 border-b border-carbon-700 flex justify-between items-center">
-              <h2 className="text-xl font-display font-bold text-white">
+            <div className="px-4 py-4 border-b border-carbon-700">
+              <h2 className="text-xl font-display font-bold text-white mb-3">
                 Lap Time Comparison
               </h2>
-              <div className="flex gap-2">
-                {/* Driver Selector Chips */}
-                <div className="flex flex-wrap gap-2 justify-end">
-                  {race.results.map((driver) => (
-                    <button
-                      key={driver.driver_code}
-                      onClick={() => {
-                        setSelectedDriversForLaps((prev) =>
-                          prev.includes(driver.driver_code)
-                            ? prev.filter((d) => d !== driver.driver_code)
-                            : [...prev, driver.driver_code]
-                        );
-                      }}
-                      className={`text-xs px-3 py-1.5 rounded-full transition-all border ${
-                        selectedDriversForLaps.includes(driver.driver_code)
-                          ? "bg-opacity-20 border-opacity-50"
-                          : "bg-transparent border-carbon-600 text-gray-500 opacity-70 hover:opacity-100"
-                      }`}
-                      style={{
-                        borderColor: selectedDriversForLaps.includes(
-                          driver.driver_code
-                        )
-                          ? driverColors[driver.driver_code] || "#999"
-                          : undefined,
-                        color: selectedDriversForLaps.includes(
-                          driver.driver_code
-                        )
-                          ? driverColors[driver.driver_code] || "#fff"
-                          : undefined,
-                        backgroundColor: selectedDriversForLaps.includes(
-                          driver.driver_code
-                        )
-                          ? `${driverColors[driver.driver_code]}33`
-                          : undefined,
-                      }}
-                    >
-                      {selectedDriversForLaps.includes(driver.driver_code) && (
-                        <span className="mr-1">●</span>
-                      )}
-                      {driver.driver_code}
-                    </button>
-                  ))}
-                </div>
+              {/* Driver Selector Chips */}
+              <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1.5">
+                {race.results.map((driver) => (
+                  <button
+                    key={driver.driver_code}
+                    onClick={() => {
+                      setSelectedDriversForLaps((prev) =>
+                        prev.includes(driver.driver_code)
+                          ? prev.filter((d) => d !== driver.driver_code)
+                          : [...prev, driver.driver_code]
+                      );
+                    }}
+                    className={`text-xs px-2 py-1 rounded-full transition-all border text-center ${
+                      selectedDriversForLaps.includes(driver.driver_code)
+                        ? "bg-opacity-20 border-opacity-50"
+                        : "bg-transparent border-carbon-600 text-gray-500 opacity-70 hover:opacity-100"
+                    }`}
+                    style={{
+                      borderColor: selectedDriversForLaps.includes(driver.driver_code)
+                        ? driverColors[driver.driver_code] || "#999"
+                        : undefined,
+                      color: selectedDriversForLaps.includes(driver.driver_code)
+                        ? driverColors[driver.driver_code] || "#fff"
+                        : undefined,
+                      backgroundColor: selectedDriversForLaps.includes(driver.driver_code)
+                        ? `${driverColors[driver.driver_code]}33`
+                        : undefined,
+                    }}
+                  >
+                    {driver.driver_code}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -2123,7 +2109,7 @@ export default function RaceDetailPage() {
               ) : (
                 <div className="bg-carbon-900/50 rounded-lg p-4">
                   <ResponsiveContainer width="100%" height={500}>
-                    <LineChart data={lapTimeChartData}>
+                    <LineChart data={lapTimeChartData} margin={{ left: 0, right: 10, top: 5, bottom: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                       <XAxis
                         dataKey="lap"
@@ -2138,8 +2124,13 @@ export default function RaceDetailPage() {
                       <YAxis
                         stroke="#888"
                         domain={["auto", "auto"]}
-                        tickFormatter={(val) => formatLapTime(val)}
-                        width={80}
+                        tickFormatter={(val: number) => {
+                          if (!val) return "";
+                          const m = Math.floor(val / 60);
+                          const s = Math.floor(val % 60).toString().padStart(2, "0");
+                          return `${m}:${s}`;
+                        }}
+                        width={38}
                       />
                       <Tooltip
                         contentStyle={{
@@ -2410,7 +2401,7 @@ export default function RaceDetailPage() {
                         />
                         <YAxis
                           stroke="#888"
-                          label={{ value: "Speed (km/h)", angle: -90, position: "insideLeft", fill: "#888" }}
+                          width={40}
                         />
                         <Tooltip contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid #333" }} labelStyle={{ color: "#fff" }} />
                         <Legend />
@@ -2452,12 +2443,7 @@ export default function RaceDetailPage() {
                         <YAxis
                           stroke="#888"
                           domain={[0, 100]}
-                          label={{
-                            value: "Throttle %",
-                            angle: -90,
-                            position: "insideLeft",
-                            fill: "#888",
-                          }}
+                          width={35}
                         />
                         <Tooltip
                           contentStyle={{
@@ -2509,12 +2495,7 @@ export default function RaceDetailPage() {
                         <YAxis
                           stroke="#888"
                           domain={[0, 1]}
-                          label={{
-                            value: "Brake Applied",
-                            angle: -90,
-                            position: "insideLeft",
-                            fill: "#888",
-                          }}
+                          width={25}
                         />
                         <Tooltip
                           contentStyle={{
@@ -2575,13 +2556,8 @@ export default function RaceDetailPage() {
                         />
                         <YAxis
                           stroke="#888"
-                          label={{
-                            value: "Gear",
-                            angle: -90,
-                            position: "insideLeft",
-                            fill: "#888",
-                          }}
                           domain={[0, 8]}
+                          width={25}
                         />
                         <Tooltip
                           contentStyle={{
@@ -2638,12 +2614,7 @@ export default function RaceDetailPage() {
                         <YAxis
                           stroke="#888"
                           domain={[0, 200]}
-                          label={{
-                            value: "Delta Speed (km/h)",
-                            angle: -90,
-                            position: "insideLeft",
-                            fill: "#888",
-                          }}
+                          width={40}
                         />
                         <Tooltip
                           contentStyle={{
@@ -2771,12 +2742,7 @@ export default function RaceDetailPage() {
                       />
                       <YAxis
                         stroke="#888"
-                        label={{
-                          value: "Speed (km/h)",
-                          angle: -90,
-                          position: "insideLeft",
-                          fill: "#888",
-                        }}
+                        width={40}
                       />
                       <Tooltip
                         contentStyle={{
@@ -2831,19 +2797,31 @@ export default function RaceDetailPage() {
                     type GPt = { x: number; y: number; gear: number };
                     let pts: GPt[] = [];
 
-                    if (circuitCoords && circuitCoords.x.length > 2) {
+                    // Use telemetry X/Y directly for accurate gear placement.
+                    // The circuit JSON files store coordinates that were rotated by
+                    // circuit_info.rotation — apply the same rotation to raw telemetry
+                    // so the track faces the same canonical direction.
+                    const telWithXY = telemetryData1.filter(p => p.x != null && p.y != null && p.gear != null);
+                    if (telWithXY.length > 2) {
+                      const rotDeg = circuitCoords?.rotation ?? 0;
+                      const rotRad = (rotDeg / 180) * Math.PI;
+                      const cosA = Math.cos(rotRad), sinA = Math.sin(rotRad);
+                      pts = telWithXY.map(p => {
+                        const rx = (p.x as number) * cosA + (p.y as number) * sinA;
+                        const ry = -(p.x as number) * sinA + (p.y as number) * cosA;
+                        return { x: rx, y: ry, gear: (p.gear as number) ?? 1 };
+                      });
+                    } else if (circuitCoords && circuitCoords.x.length > 2) {
+                      // Fallback: project gear onto circuit layout coords via distance fraction
                       const cirPts = circuitCoords.x.map((x, i) => ({ x, y: circuitCoords!.y[i] }));
-
                       const cirDist: number[] = [0];
                       for (let i = 1; i < cirPts.length; i++) {
                         const dx = cirPts[i].x - cirPts[i-1].x, dy = cirPts[i].y - cirPts[i-1].y;
                         cirDist.push(cirDist[i-1] + Math.sqrt(dx*dx + dy*dy));
                       }
                       const totalCirDist = cirDist[cirDist.length - 1] || 1;
-
                       const tel = telemetryData1.filter(p => p.distance != null && p.gear != null);
                       const maxTelDist = tel.length > 0 ? Math.max(...tel.map(p => p.distance as number)) : 1;
-
                       pts = cirPts.map((cp, i) => {
                         const frac = cirDist[i] / totalCirDist;
                         const targetDist = frac * maxTelDist;
@@ -2855,10 +2833,6 @@ export default function RaceDetailPage() {
                         }
                         return { x: cp.x, y: cp.y, gear: (tel[best]?.gear as number) ?? 1 };
                       });
-                    } else {
-                      pts = telemetryData1
-                        .filter((p) => p.x != null && p.y != null)
-                        .map(p => ({ x: p.x as number, y: p.y as number, gear: (p.gear as number) ?? 1 }));
                     }
 
                     if (pts.length < 2) {
@@ -2981,12 +2955,7 @@ export default function RaceDetailPage() {
                       <YAxis
                         stroke="#888"
                         domain={[0, 100]}
-                        label={{
-                          value: "Throttle %",
-                          angle: -90,
-                          position: "insideLeft",
-                          fill: "#888",
-                        }}
+                        width={35}
                       />
                       <Tooltip
                         contentStyle={{
@@ -3048,12 +3017,7 @@ export default function RaceDetailPage() {
                       <YAxis
                         stroke="#888"
                         domain={[0, 100]}
-                        label={{
-                          value: "Brake",
-                          angle: -90,
-                          position: "insideLeft",
-                          fill: "#888",
-                        }}
+                        width={25}
                       />
                       <Tooltip
                         contentStyle={{

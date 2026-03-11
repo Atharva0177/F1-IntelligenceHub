@@ -126,7 +126,7 @@ export const api = {
     driverCode?: string,
     lapNumber?: number
   ): Promise<TelemetryPoint[]> {
-    const params: any = {};
+    const params: any = { limit: 5000 };
     if (driverCode) params.driver_code = driverCode;
     if (lapNumber) params.lap_number = lapNumber;
     

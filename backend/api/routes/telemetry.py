@@ -31,7 +31,7 @@ async def get_session_telemetry(
     session_id: int,
     driver_code: Optional[str] = None,
     lap_number: Optional[int] = None,
-    limit: int = 1000,
+    limit: int = 5000,
     db: Session = Depends(get_db)
 ):
     """
