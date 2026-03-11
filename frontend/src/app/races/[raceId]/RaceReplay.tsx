@@ -483,12 +483,12 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
     <div className="bg-[#050508] rounded-xl border border-gray-900 overflow-hidden font-mono select-none">
 
       {/* ── TOP INFO BAR ── */}
-      <div className="bg-black px-5 py-2.5 flex items-center gap-6 border-b border-gray-900">
+      <div className="bg-black px-3 sm:px-5 py-2 sm:py-2.5 flex items-center gap-3 sm:gap-6 border-b border-gray-900">
         <div>
-          <div className="text-white font-bold text-lg leading-none">
+          <div className="text-white font-bold text-sm sm:text-lg leading-none">
             Lap: {currentLap}<span className="text-gray-600 font-normal">/{totalLaps}</span>
           </div>
-          <div className="text-gray-400 text-sm mt-0.5">
+          <div className="text-gray-400 text-xs sm:text-sm mt-0.5">
             Race Time: <span className="text-white">{fmtTime(currentTime)}</span>{' '}
             <span className="text-gray-600">(x{speed})</span>
           </div>
@@ -504,14 +504,14 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
             <span className="text-emerald-700 text-[10px]">({drsTelemetry.zone_count ?? drsTelemetry.drs_zones.length})</span>
           </div>
         ) : null}
-        <div className="ml-auto text-gray-700 text-xs">{race.name} · {race.season_year}</div>
+        <div className="hidden sm:block ml-auto text-gray-700 text-xs">{race.name} · {race.season_year}</div>
       </div>
 
       {/* ── MAIN AREA ── */}
-      <div className="flex" style={{ minHeight: 520 }}>
+      <div className="flex flex-row" style={{ minHeight: 'clamp(300px, 55vw, 520px)' }}>
 
-        {/* LEFT PANEL */}
-        <div className="w-[210px] shrink-0 bg-black/50 border-r border-gray-900 overflow-y-auto">
+        {/* LEFT PANEL — hidden on mobile, full panel on sm+ */}
+        <div className="hidden sm:block w-[210px] shrink-0 bg-black/50 border-r border-gray-900 overflow-y-auto">
 
           {/* Weather block */}
           {weatherSummary && (
@@ -697,9 +697,9 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
         </div>
 
         {/* ── TRACK SVG ── */}
-        <div className="flex-1 bg-black relative">
-          {/* Track legend overlay */}
-          <div className="absolute bottom-3 right-3 z-10 flex flex-col gap-1 bg-black/70 border border-gray-800 rounded px-2.5 py-2 text-[10px]">
+        <div className="flex-1 bg-black relative" style={{ minWidth: 0 }}>
+          {/* Track legend overlay — desktop only */}
+          <div className="hidden sm:flex absolute bottom-3 right-3 z-10 flex-col gap-1 bg-black/70 border border-gray-800 rounded px-2.5 py-2 text-[10px]">
             <div className="text-gray-500 uppercase tracking-widest font-bold mb-0.5">Legend</div>
             <div className="flex items-center gap-2">
               <svg width="20" height="5" viewBox="0 0 20 5">
@@ -720,19 +720,19 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
             const { label, sub, icon } = STATUS_LABELS[activeTrackStatus];
             const col = STATUS_COLORS[activeTrackStatus];
             return (
-              <div className="absolute top-4 left-0 right-0 flex justify-center z-20 pointer-events-none">
+              <div className="absolute top-2 sm:top-4 left-0 right-0 flex justify-center z-20 pointer-events-none px-2">
                 <div
-                  className="flex items-center gap-3 px-5 py-2.5 rounded-xl border"
+                  className="flex items-center gap-1.5 sm:gap-3 px-2.5 py-1.5 sm:px-5 sm:py-2.5 rounded-lg sm:rounded-xl border"
                   style={{
                     background: col.replace('0.65', '0.15'),
                     borderColor: col.replace('0.65', '0.55'),
                     boxShadow: `0 4px 28px ${col.replace('0.65', '0.35')}`,
                   }}
                 >
-                  <span className="text-xl leading-none">{icon}</span>
+                  <span className="text-base sm:text-xl leading-none">{icon}</span>
                   <div>
-                    <div className="text-white font-black text-sm tracking-[0.15em] leading-tight">{label}</div>
-                    <div className="text-white/60 text-[10px] mt-0.5 tracking-wide">{sub}</div>
+                    <div className="text-white font-black text-xs sm:text-sm tracking-[0.12em] sm:tracking-[0.15em] leading-tight">{label}</div>
+                    <div className="text-white/60 text-[9px] sm:text-[10px] mt-0.5 tracking-wide hidden sm:block">{sub}</div>
                   </div>
                 </div>
               </div>
@@ -814,8 +814,8 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
           </svg>
         </div>
 
-        {/* ── RIGHT PANEL – LEADERBOARD ── */}
-        <div className="w-[175px] shrink-0 bg-black/50 border-l border-gray-900 flex flex-col">
+        {/* ── RIGHT PANEL – LEADERBOARD — hidden on mobile ── */}
+        <div className="hidden sm:flex w-[175px] shrink-0 bg-black/50 border-l border-gray-900 flex-col">
           <div className="px-3 py-2 border-b border-gray-900 bg-black/60 flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-white" />
             <span className="text-white text-[11px] font-bold uppercase tracking-widest">Leaderboard</span>
@@ -869,10 +869,50 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
         </div>
       </div>
 
+      {/* ── MOBILE LEADERBOARD — 2-column grid below the track ── */}
+      <div className="sm:hidden border-t border-gray-900 bg-black/60 px-2 py-1.5">
+        <div className="grid grid-cols-2 gap-x-2 gap-y-0">
+          {leaderboard.map(({ driver, position, lap, finished, isInPit }) => {
+            const color = finished ? '#555' : (driverColors[driver] || '#888');
+            const isFeat = featuredDrivers.includes(driver);
+            const info2 = driverInfo?.[driver];
+            const isRetired2 = finished && info2?.status && info2.status !== 'Finished' && !info2.status.startsWith('+');
+            const currentTire = driverTireByLap[driver]?.[lap];
+            const leaderLap = leaderboard[0]?.lap ?? 0;
+            const lapsDown = !finished && leaderLap > 0 ? leaderLap - lap : 0;
+            return (
+              <div key={driver} onClick={() => toggleFeatured(driver)}
+                className={`flex items-center gap-1 py-[3px] px-1 rounded cursor-pointer transition-colors ${
+                  isFeat ? 'bg-white/10' : ''
+                }`}>
+                <span className={`text-[9px] font-bold w-4 shrink-0 tabular-nums text-right ${
+                  position === 1 ? 'text-yellow-400' : position === 2 ? 'text-gray-300' : position === 3 ? 'text-amber-600' : 'text-gray-600'
+                }`}>{position}.</span>
+                <div className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                <span className="text-[10px] font-bold flex-1 truncate" style={{ color: isRetired2 ? '#ef4444' : color }}>
+                  {driver}
+                </span>
+                {isInPit ? (
+                  <span className="text-[8px] text-orange-400 font-bold shrink-0">PIT</span>
+                ) : isRetired2 ? (
+                  <span className="text-[8px] text-red-500 shrink-0">OUT</span>
+                ) : finished ? (
+                  <span className="text-[8px] text-gray-600 shrink-0">P{info2?.final_position ?? position}</span>
+                ) : currentTire ? (
+                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: tireColor(currentTire) }} title={currentTire} />
+                ) : lapsDown > 0 ? (
+                  <span className="text-[8px] text-red-400/70 shrink-0">+{lapsDown}L</span>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/* ── BOTTOM CONTROLS ── */}
       <div className="bg-black border-t border-gray-900">
-        {/* Keyboard hints */}
-        <div className="px-5 pt-2 pb-1 text-[9px] text-gray-700 flex flex-wrap gap-x-5 gap-y-0.5">
+        {/* Keyboard hints — desktop only */}
+        <div className="hidden sm:flex px-5 pt-2 pb-1 text-[9px] text-gray-700 flex-wrap gap-x-5 gap-y-0.5">
           <span className="text-gray-600 font-semibold">Controls:</span>
           <span>[SPACE] Pause/Resume</span>
           <span>[←/→] Rewind/FastForward</span>
@@ -882,7 +922,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
         </div>
 
         {/* Playback row */}
-        <div className="px-5 pb-2 flex items-center gap-3">
+        <div className="px-3 sm:px-5 py-2 sm:pb-2 flex items-center gap-2 sm:gap-3">
           {/* Restart */}
           <button onClick={() => { setCurrentTime(0); setIsPlaying(false); }}
             className="text-gray-600 hover:text-white transition-colors shrink-0" title="Restart">
@@ -973,6 +1013,98 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
                 );
               })}
           </div>
+        </div>
+      </div>
+
+      {/* ── MOBILE-ONLY: Weather + Featured Driver strip (scrollable) ── */}
+      <div className="sm:hidden border-t border-gray-900 overflow-x-auto bg-black/60">
+        <div className="flex gap-2 p-2.5" style={{ minWidth: 'max-content' }}>
+          {/* Weather pill */}
+          {weatherSummary && (
+            <div className="shrink-0 rounded bg-black/80 border border-gray-800 px-2.5 py-2 text-[10px] text-gray-400 space-y-0.5" style={{ minWidth: 100 }}>
+              <div className="text-white text-[9px] font-bold uppercase tracking-widest mb-1.5">Weather</div>
+              {weatherSummary.avg_track_temp != null && <div>🌡 Track: <span className="text-gray-200">{weatherSummary.avg_track_temp}°C</span></div>}
+              {weatherSummary.avg_air_temp != null && <div>🌡 Air: <span className="text-gray-200">{weatherSummary.avg_air_temp}°C</span></div>}
+              {weatherSummary.avg_humidity != null && <div>💧 Hum: <span className="text-gray-200">{weatherSummary.avg_humidity}%</span></div>}
+              {weatherSummary.avg_wind_speed != null && <div>💨 Wind: <span className="text-gray-200">{weatherSummary.avg_wind_speed} m/s</span></div>}
+              <div>🌧 <span className={weatherSummary.rainfall_occurred ? 'text-blue-400' : 'text-gray-200'}>{weatherSummary.rainfall_occurred ? 'WET' : 'DRY'}</span></div>
+            </div>
+          )}
+          {/* Featured driver mini-cards */}
+          {featuredEntries.map(entry => {
+            const color = driverColors[entry.driver] || '#888';
+            const currentTire = driverTireByLap[entry.driver]?.[entry.lap];
+            const isInPitM = driverPositions[entry.driver]?.isInPit ?? false;
+            const telemSamplesM = drsTelemetry?.driver_telemetry?.[entry.driver];
+            const telemIdxM = (!isInPitM && telemSamplesM) ? Math.min(Math.floor(entry.frac * (telemSamplesM.length - 1)), telemSamplesM.length - 1) : -1;
+            const telemM = telemIdxM >= 0 ? telemSamplesM![telemIdxM] : null;
+            const telSpeedM    = isInPitM ? 0 : (telemM?.[0] ?? null);
+            const telThrottleM = isInPitM ? 0 : (telemM?.[1] ?? null);
+            const telBrakeM    = isInPitM ? false : (telemM ? telemM[2] === 1 : false);
+            const telDrsM      = isInPitM ? 0 : (telemM?.[3] ?? 0);
+            const telGearM     = isInPitM ? '-' : (telemM?.[4] ?? null);
+            const drsActiveM   = !isInPitM && telDrsM >= 10;
+            const carAheadM    = entry.position > 1 ? leaderboard[entry.position - 2] : null;
+            const carBehindM   = entry.position < leaderboard.length ? leaderboard[entry.position] : null;
+            return (
+              <div key={entry.driver} className="shrink-0 rounded overflow-hidden border border-gray-800" style={{ minWidth: 145 }}>
+                <div className="px-2.5 py-1 flex justify-between items-center text-white text-[10px] font-bold" style={{ backgroundColor: color + 'bb' }}>
+                  <span>{entry.driver}</span>
+                  <span className="opacity-80">P{entry.position}</span>
+                </div>
+                <div className="px-2.5 py-2 bg-black/70 text-[10px] space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Lap:</span><span className="text-white">{entry.lap} / {totalLaps}</span>
+                  </div>
+                  {currentTire && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Tyre:</span>
+                      <span className="font-bold text-[9px]" style={{ color: tireColor(currentTire) }}>{currentTire}</span>
+                    </div>
+                  )}
+                  {telemM ? (
+                    <>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-gray-600 text-[9px]">Gear <span className="font-black text-white">{telGearM}</span></span>
+                        <span className="font-bold text-white tabular-nums">{telSpeedM} <span className="text-gray-600 text-[8px] font-normal">km/h</span></span>
+                      </div>
+                      <div className="h-1 bg-gray-900 rounded overflow-hidden">
+                        <div className="h-full rounded" style={{ width: `${Math.min(100, (telSpeedM ?? 0) / 350 * 100)}%`, background: '#3b82f6' }} />
+                      </div>
+                      <div className="flex justify-between text-[9px]"><span className="text-gray-500">Throttle</span><span style={{ color: '#22c55e' }}>{telThrottleM}%</span></div>
+                      <div className="h-1 bg-gray-900 rounded overflow-hidden">
+                        <div className="h-full rounded" style={{ width: `${telThrottleM ?? 0}%`, background: '#22c55e' }} />
+                      </div>
+                      <div className="flex gap-1">
+                        <div className={`flex-1 text-center text-[8px] font-bold py-0.5 rounded ${telBrakeM ? 'bg-red-600 text-white' : 'bg-gray-900 text-gray-700'}`}>BRAKE</div>
+                        <div className={`flex-1 text-center text-[8px] font-bold py-0.5 rounded ${drsActiveM ? 'bg-emerald-500 text-black' : 'bg-gray-900 text-gray-700'}`}>DRS {drsActiveM ? 'ON' : 'OFF'}</div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {!entry.finished && carAheadM && (
+                        <div className="text-[9px]">
+                          <span className="text-gray-600">Ahead: </span>
+                          <span className="text-white">({carAheadM.driver}) +{computeGapSeconds(carAheadM.driver, entry.driver).toFixed(1)}s</span>
+                        </div>
+                      )}
+                      {!entry.finished && carBehindM && (
+                        <div className="text-[9px]">
+                          <span className="text-gray-600">Behind: </span>
+                          <span className="text-gray-300">({carBehindM.driver}) -{computeGapSeconds(entry.driver, carBehindM.driver).toFixed(1)}s</span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {featuredDrivers.length === 0 && (
+            <div className="text-[10px] text-gray-700 px-2 py-4 self-center">
+              Tap a driver in the leaderboard to feature them
+            </div>
+          )}
         </div>
       </div>
     </div>

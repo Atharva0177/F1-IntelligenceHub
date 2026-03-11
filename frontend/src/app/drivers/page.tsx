@@ -62,7 +62,7 @@ function DriverCard({ driver, index, selectedSeason }: { driver: Driver; index: 
     <Link
       href={`/drivers/${driver.id}?season=${selectedSeason}`}
       className="group relative overflow-hidden rounded-xl block hover:-translate-y-1 hover:shadow-2xl transition-all duration-300"
-      style={{ background: tc, height: 220 }}
+      style={{ background: tc, height: 'clamp(170px,35vw,220px)' }}
     >
       {/* Left text zone */}
       <div className="absolute inset-0 z-10 p-4 flex flex-col justify-between" style={{ width: '58%' }}>
@@ -76,12 +76,7 @@ function DriverCard({ driver, index, selectedSeason }: { driver: Driver; index: 
 
         {/* Driver number */}
         <div
-          className="text-white font-black leading-none"
-          style={{
-            fontSize: '3.2rem',
-            fontStyle: isFerrari ? 'italic' : 'normal',
-            opacity: 0.9,
-          }}
+          className={`text-white font-black leading-none text-4xl sm:text-5xl opacity-90 ${isFerrari ? 'italic' : ''}`}
         >
           {driverNum}
         </div>
@@ -158,12 +153,12 @@ export default function DriversPage() {
     <div className="space-y-6 animate-fade-in pb-10">
 
       {/* Header */}
-      <section className="relative overflow-hidden rounded-2xl bg-carbon-900 border border-carbon-800 p-6 md:p-8">
+      <section className="relative overflow-hidden rounded-2xl bg-carbon-900 border border-carbon-800 p-4 sm:p-6 md:p-8">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_70%_50%,rgba(59,130,246,0.06),transparent)]" />
         <div className="relative flex flex-col sm:flex-row sm:items-end justify-between gap-4">
           <div>
             <div className="text-xs text-blue-400 font-bold uppercase tracking-widest mb-2">Driver Profiles</div>
-            <h1 className="text-4xl md:text-5xl font-display font-bold text-white leading-none">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-display font-bold text-white leading-none">
               {selectedSeason}{' '}
               <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">Drivers</span>
             </h1>
@@ -220,19 +215,18 @@ export default function DriversPage() {
 
           {/* Summary strip */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="stat-card racing-stripe pl-6">
-              <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Field Size</div>
+            <div className="stat-card racing-stripe pl-4 sm:pl-6">
               <div className="text-3xl font-display font-bold text-white">{drivers.length}</div>
               <div className="text-track-green text-xs mt-1">{selectedSeason} Season</div>
             </div>
-            <div className="stat-card racing-stripe pl-6">
+            <div className="stat-card racing-stripe pl-4 sm:pl-6">
               <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Championship Leader</div>
               <div className="text-xl font-display font-bold text-white">
                 {drivers[0]?.first_name} <span className="uppercase">{drivers[0]?.last_name}</span>
               </div>
               <div className="text-yellow-400 text-xs mt-1">{Math.round(drivers[0]?.total_points ?? 0)} pts</div>
             </div>
-            <div className="stat-card racing-stripe pl-6">
+            <div className="stat-card racing-stripe pl-4 sm:pl-6">
               <div className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-1">Total Points Scored</div>
               <div className="text-3xl font-display font-bold text-white">
                 {Math.round(drivers.reduce((s, d) => s + (d.total_points ?? 0), 0)).toLocaleString()}

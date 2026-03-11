@@ -152,7 +152,7 @@ export default function Home() {
     <div className={`space-y-10 pb-16 ${pageEntered ? "page-enter" : "opacity-0"}`}>
 
       {/* ════════════════════════════ HERO ════════════════════════════ */}
-      <section className="relative overflow-hidden rounded-3xl border border-carbon-800 min-h-[440px] flex flex-col justify-center"
+      <section className="relative overflow-hidden rounded-3xl border border-carbon-800 min-h-[320px] sm:min-h-[400px] md:min-h-[440px] flex flex-col justify-center"
         style={{ background: "linear-gradient(160deg,#080810 0%,#07070a 100%)" }}>
 
         {/* Subtle grid */}
@@ -170,7 +170,7 @@ export default function Home() {
         <div className="absolute bottom-0 inset-x-0 h-px bg-gradient-to-r from-transparent via-racing-red-500/30 to-transparent" />
 
         {/* ── Content ── */}
-        <div className="relative z-10 p-8 md:p-14 flex flex-col md:flex-row items-start md:items-center gap-10">
+        <div className="relative z-10 px-4 py-6 sm:p-8 md:p-12 lg:p-14 flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-10">
 
           {/* Left text */}
           <div className="flex-1 max-w-2xl">
@@ -181,10 +181,10 @@ export default function Home() {
             </div>
 
             {/* Title — staggered line-by-line */}
-            <h1 className="font-display font-bold leading-[0.92] mb-6">
+            <h1 className="font-display font-bold leading-tight md:leading-[0.92] mb-6">
               {titleLines.map(({ text, delay, red, underline }) => (
                 <span key={text}
-                  className={`relative block text-5xl md:text-[4.5rem] transition-all duration-700 ${heroReady ? "opacity-100 translate-y-0" : "opacity-0 translate-y-7"} ${red ? "text-gradient-red" : "text-white"}`}
+                  className={`relative block text-3xl sm:text-4xl md:text-5xl lg:text-[4.5rem] transition-all duration-700 ${heroReady ? "opacity-100 translate-y-0" : "opacity-0 translate-y-7"} ${red ? "text-gradient-red" : "text-white"}`}
                   style={{ transitionDelay: delay }}>
                   {text}
                   {underline && (
@@ -302,7 +302,7 @@ export default function Home() {
       </section>
 
       {/* ════════════════════════════ STATS ════════════════════════════ */}
-      <section ref={statsSection.ref} className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <section ref={statsSection.ref} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {STAT_DEFS.map(({ key, label, color }, i) => (
           <div key={label}
             className="glass p-5 text-center"
@@ -382,7 +382,7 @@ export default function Home() {
               </svg>
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
             {recentRaces.map((race, i) => {
               const date = race.date ? new Date(race.date) : null;
               return (
@@ -471,7 +471,7 @@ export default function Home() {
               Live Sampling
             </div>
             {/* Bars — scaleY from bottom, fixed px heights avoid % resolution issues */}
-            <div className="relative z-10 w-full flex items-end justify-between gap-1 h-36">
+            <div className="relative z-10 w-full flex items-end justify-between gap-0.5 md:gap-1 h-24 md:h-36">
               {TEL_BARS.map((h, i) => (
                 <div key={i} className="flex-1 rounded-t-sm"
                   style={{

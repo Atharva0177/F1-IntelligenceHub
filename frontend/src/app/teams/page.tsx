@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import api from '@/lib/api';
 import { useDataVersion } from '@/lib/useDataVersion';
-import type { Driver } from '@/types';
+import { getCarImage } from '@/lib/carImages';
+import type { Driver, ConstructorStanding } from '@/types';
 
 /* ── Constants ─────────────────────────────────────────────────── */
 const TEAM_COLORS: Record<string, string> = {
@@ -113,42 +114,39 @@ function getLogoUrls(teamName: string, season: number): string[] {
   return [];
 }
 
-/** Fallback: large styled team abbreviation when no logo URL loads */
-function TeamLogoFallback({ name, large = false }: { name: string; large?: boolean }) {
+/** Championship stats panel — shows P{n}, points, wins */
+function TeamStatsPanel({ standing }: { standing?: ConstructorStanding }) {
+  if (!standing) {
+    return (
+      <div className="absolute inset-0 opacity-[0.06] pointer-events-none" style={{
+        backgroundImage: 'repeating-linear-gradient(70deg, transparent 0, transparent 14px, rgba(255,255,255,1) 14px, rgba(255,255,255,1) 16px)',
+      }} />
+    );
+  }
   return (
-    <div className="flex items-center justify-center w-full h-full">
-      <span
-        className="font-black text-white uppercase tracking-widest leading-none select-none"
-        style={{ fontSize: large ? '5rem' : '2.8rem', opacity: 0.28, letterSpacing: '0.18em' }}
+    <div className="flex flex-col items-center justify-center w-full h-full pointer-events-none select-none">
+      <div
+        className="font-black text-white leading-none"
+        style={{ fontSize: '5rem', opacity: 0.18, letterSpacing: '-0.04em', lineHeight: 1 }}
       >
-        {getTeamShort(name)}
-      </span>
+        P{standing.position}
+      </div>
+      <div className="flex items-stretch gap-3 mt-1.5" style={{ opacity: 0.55 }}>
+        <div className="text-center">
+          <div className="text-white font-black text-lg leading-none">{standing.points}</div>
+          <div className="text-white/60 text-[0.58rem] font-bold uppercase tracking-widest mt-0.5">pts</div>
+        </div>
+        {standing.wins > 0 && (
+          <>
+            <div className="w-px bg-white/25 self-stretch" />
+            <div className="text-center">
+              <div className="text-white font-black text-lg leading-none">{standing.wins}</div>
+              <div className="text-white/60 text-[0.58rem] font-bold uppercase tracking-widest mt-0.5">wins</div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
-  );
-}
-
-/** TeamLogo — tries F1 CDN logo URLs, falls back to abbreviation badge */
-function TeamLogo({
-  teamName, season, className, style, fallbackLarge,
-}: {
-  teamName: string; season: number;
-  className?: string; style?: React.CSSProperties;
-  fallbackLarge?: boolean;
-}) {
-  const urls = getLogoUrls(teamName, season);
-  const [failedSet, setFailedSet] = useState<Set<string>>(new Set());
-  useEffect(() => setFailedSet(new Set()), [teamName, season]);
-  const currentUrl = urls.find(u => !failedSet.has(u));
-  if (!currentUrl) return <TeamLogoFallback name={teamName} large={fallbackLarge} />;
-  return (
-    <img
-      key={currentUrl}
-      src={currentUrl}
-      alt=""
-      onError={() => setFailedSet(prev => new Set([...prev, currentUrl!]))}
-      className={className}
-      style={style}
-    />
   );
 }
 
@@ -170,17 +168,18 @@ function TeamBadge() {
 
 /* ── TeamCard component ─────────────────────────────────────────── */
 function TeamCard({
-  team, season, constructorId,
+  team, season, constructorId, standing,
 }: {
-  team: TeamEntry; season: number; constructorId: number;
+  team: TeamEntry; season: number; constructorId: number; standing?: ConstructorStanding;
 }) {
   const tc = getTeamColor(team.name);
+  const carImg = getCarImage(team.name, season);
 
   return (
     <Link
       href={`/teams/${constructorId}?season=${season}`}
       className="group relative overflow-hidden rounded-xl block hover:-translate-y-1 hover:shadow-2xl transition-all duration-300"
-      style={{ background: tc, height: 200 }}
+      style={{ background: tc, height: 'clamp(160px,30vw,200px)' }}
     >
       {/* Subtle halftone/dot pattern */}
       <div
@@ -191,25 +190,37 @@ function TeamCard({
         }}
       />
 
-      {/* Team logo — right half, vertically centred */}
-      <div className="absolute right-0 top-0 bottom-0 w-[48%] flex items-center justify-center pointer-events-none select-none">
-        <TeamLogo
-          teamName={team.name}
-          season={season}
-          className="h-[88px] w-auto max-w-[170px] object-contain transition-transform duration-500 group-hover:scale-105"
-          style={{ filter: 'drop-shadow(0 4px 16px rgba(0,0,0,0.5)) brightness(1.05)' }}
-        />
-      </div>
+      {/* Car livery image — right side, bottom-anchored */}
+      {carImg ? (
+        <div className="absolute right-0 bottom-0 top-0 w-[65%] overflow-hidden">
+          <img
+            src={carImg}
+            alt={`${team.name} car`}
+            className="absolute bottom-0 right-0 w-full h-full object-contain object-right-bottom"
+            style={{
+              filter: 'drop-shadow(-12px 0 28px rgba(0,0,0,0.55))',
+              transform: 'scale(1.06)',
+              transformOrigin: 'right bottom',
+            }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        </div>
+      ) : (
+        /* Fallback: championship stats watermark when no car image */
+        <div className="absolute right-0 top-0 bottom-0 w-[48%]">
+          <TeamStatsPanel standing={standing} />
+        </div>
+      )}
 
       {/* Left-to-right fade so text stays readable */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.06) 50%, transparent 72%)' }}
+        style={{ background: 'linear-gradient(90deg, rgba(0,0,0,0.35) 0%, rgba(0,0,0,0.12) 50%, transparent 75%)' }}
       />
 
       {/* Top-left: team name + drivers */}
       <div className="absolute top-0 left-0 p-4 z-10">
-        <div className="text-white font-black text-xl leading-none uppercase tracking-tight mb-3">
+        <div className="text-white font-black text-lg sm:text-xl leading-none uppercase tracking-tight mb-3">
           {team.name}
         </div>
         <div className="space-y-1">
@@ -226,6 +237,22 @@ function TeamCard({
           ))}
         </div>
       </div>
+
+      {/* Championship position badge — bottom-left, over the car */}
+      {standing && (
+        <div className="absolute bottom-3 left-4 z-10 flex items-baseline gap-2">
+          <span
+            className="font-black text-white leading-none text-3xl sm:text-[2rem]"
+            style={{ opacity: 0.85, letterSpacing: '-0.03em' }}
+          >
+            P{standing.position}
+          </span>
+          <span className="text-white/55 text-xs font-bold uppercase tracking-widest">
+            {standing.points} pts
+            {standing.wins > 0 && ` · ${standing.wins}W`}
+          </span>
+        </div>
+      )}
 
       {/* Top-right: shield badge */}
       <div className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-white/15 flex items-center justify-center backdrop-blur-sm border border-white/20">
@@ -246,6 +273,7 @@ export default function TeamsPage() {
   const [selectedSeason, setSelectedSeason]   = useState<number>(0);
   const [teams, setTeams]                     = useState<TeamEntry[]>([]);
   const [constructorMap, setConstructorMap]   = useState<Record<string, number>>({});
+  const [standingsMap, setStandingsMap]       = useState<Record<string, ConstructorStanding>>({});
   const [loading, setLoading]                 = useState(true);
 
   const seasonFromUrl = searchParams.get('season');
@@ -274,11 +302,17 @@ export default function TeamsPage() {
     Promise.all([
       api.getDrivers(selectedSeason),
       api.getConstructors(),
-    ]).then(([drivers, constructors]) => {
+      api.getConstructorStandings(selectedSeason).catch(() => [] as ConstructorStanding[]),
+    ]).then(([drivers, constructors, standings]) => {
       /* Build constructor ID map */
       const cMap: Record<string, number> = {};
       constructors.forEach((c) => { cMap[c.name] = c.id; });
       setConstructorMap(cMap);
+
+      /* Build standings map */
+      const sMap: Record<string, ConstructorStanding> = {};
+      standings.forEach((s) => { sMap[s.team_name] = s; });
+      setStandingsMap(sMap);
 
       /* Group drivers by team */
       const byTeam: Record<string, Driver[]> = {};
@@ -290,7 +324,6 @@ export default function TeamsPage() {
 
       /* Build ordered team list */
       const orderedTeams: TeamEntry[] = [];
-      const seen = new Set<string>();
 
       /* Exact DB name match first, then fuzzy — avoids picking wrong team */
       const findId = (teamName: string) =>
@@ -301,23 +334,25 @@ export default function TeamsPage() {
           )?.[1]
         ?? 0;
 
-      /* First add teams in preferred order */
-      TEAM_ORDER.forEach((preferred) => {
-        for (const [teamName, teamDrivers] of Object.entries(byTeam)) {
-          if (seen.has(teamName)) continue;
-          if (teamName.toLowerCase().includes(preferred.toLowerCase()) ||
-              preferred.toLowerCase().includes(teamName.toLowerCase())) {
-            orderedTeams.push({ id: findId(teamName), name: teamName, drivers: teamDrivers });
-            seen.add(teamName);
-          }
-        }
+      /* Add all teams */
+      Object.entries(byTeam).forEach(([teamName, teamDrivers]) => {
+        orderedTeams.push({ id: findId(teamName), name: teamName, drivers: teamDrivers });
       });
 
-      /* Add any remaining teams */
-      Object.entries(byTeam).forEach(([teamName, teamDrivers]) => {
-        if (!seen.has(teamName)) {
-          orderedTeams.push({ id: findId(teamName), name: teamName, drivers: teamDrivers });
-        }
+      /* Sort by championship position if available, else keep insertion order */
+      orderedTeams.sort((a, b) => {
+        const sA = sMap[a.name]
+          ?? Object.values(sMap).find(s =>
+              s.team_name.toLowerCase().includes(a.name.toLowerCase()) ||
+              a.name.toLowerCase().includes(s.team_name.toLowerCase()));
+        const sB = sMap[b.name]
+          ?? Object.values(sMap).find(s =>
+              s.team_name.toLowerCase().includes(b.name.toLowerCase()) ||
+              b.name.toLowerCase().includes(s.team_name.toLowerCase()));
+        if (sA && sB) return sA.position - sB.position;
+        if (sA) return -1;
+        if (sB) return 1;
+        return 0;
       });
 
       setTeams(orderedTeams);
@@ -331,7 +366,7 @@ export default function TeamsPage() {
 
       {/* Header */}
       <div className="pt-2">
-        <div className="text-4xl md:text-5xl font-display font-black text-white leading-none uppercase tracking-tight">
+        <div className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-display font-black text-white leading-none uppercase tracking-tight">
           F1 TEAMS{selectedSeason ? ` ${selectedSeason}` : ''}
         </div>
         <div className="text-sm mt-1 font-medium" style={{ color: '#00d2be' }}>
@@ -367,14 +402,22 @@ export default function TeamsPage() {
         <div className="text-center text-gray-500 py-20">No team data for this season.</div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {teams.map((team) => (
-            <TeamCard
-              key={team.name}
-              team={team}
-              season={selectedSeason}
-              constructorId={team.id}
-            />
-          ))}
+          {teams.map((team) => {
+            const standing = standingsMap[team.name]
+              ?? Object.values(standingsMap).find(s =>
+                  s.team_name.toLowerCase().includes(team.name.toLowerCase()) ||
+                  team.name.toLowerCase().includes(s.team_name.toLowerCase())
+                );
+            return (
+              <TeamCard
+                key={team.name}
+                team={team}
+                season={selectedSeason}
+                constructorId={team.id}
+                standing={standing}
+              />
+            );
+          })}
         </div>
       )}
     </div>

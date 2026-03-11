@@ -229,12 +229,12 @@ export default function RacesPage() {
   return (
     <div className="space-y-8 animate-fade-in pb-10">
       {/* Page header */}
-      <section className="relative overflow-hidden rounded-3xl bg-carbon-900 border border-carbon-800 p-7 md:p-10">
+      <section className="relative overflow-hidden rounded-3xl bg-carbon-900 border border-carbon-800 p-5 sm:p-7 md:p-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_30%_50%,rgba(225,6,0,0.07),transparent)]" />
         <div className="relative flex flex-col sm:flex-row sm:items-end justify-between gap-5">
           <div>
             <div className="text-xs text-racing-red-400 font-bold uppercase tracking-widest mb-2">Season Archive</div>
-            <h1 className="text-4xl md:text-5xl font-display font-bold text-white leading-none">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-display font-bold text-white leading-none">
               {selectedSeason}{' '}
               <span className="text-gradient-red">F1 Season</span>
             </h1>
@@ -264,7 +264,7 @@ export default function RacesPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
             {races.map((race, i) => <RaceCard key={race.id} race={race} index={i} />)}
           </div>
           {races.length === 0 && (

@@ -27,8 +27,8 @@ function slugify(name: string): string {
 const CDN_BASE =
   'https://media.formula1.com/image/upload/f_auto,c_limit,q_auto,w_{W}/content/dam/fom-website/drivers';
 
-// Season folders to try, newest first.
-const ALL_YEARS = [2026, 2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017];
+// Season folders to try, newest first (kept short to minimise 404 requests).
+const ALL_YEARS = [2026, 2025, 2024, 2023, 2022, 2021];
 
 /**
  * Returns an ordered list of candidate F1 CDN image URLs for a driver.

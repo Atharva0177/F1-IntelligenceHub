@@ -6,6 +6,7 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { useDataVersion } from '@/lib/useDataVersion';
 import { getDriverImageUrls } from '@/lib/driverImages';
+import { getCarImage } from '@/lib/carImages';
 import type { Driver } from '@/types';
 
 /* ── Static maps ────────────────────────────────────────────────── */
@@ -364,7 +365,7 @@ function DriverCard({
     <Link
       href={`/drivers/${driver.id}?season=${season}`}
       className="group relative overflow-hidden rounded-xl block transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
-      style={{ background: teamColor, height: 200 }}
+      style={{ background: teamColor, height: 'clamp(160px,30vw,200px)' }}
     >
       {/* Halftone pattern */}
       <div
@@ -382,7 +383,7 @@ function DriverCard({
           <div className="text-white/50 text-[11px] mt-1 font-medium">{driver.team_name}</div>
         </div>
         <div>
-          <div className="text-white font-black leading-none mb-1" style={{ fontSize: '2.8rem', opacity: 0.9 }}>
+          <div className="text-white font-black leading-none mb-1 text-4xl sm:text-5xl opacity-90">
             {num}
           </div>
           {flag && <div className="text-xl">{flag}</div>}
@@ -522,6 +523,7 @@ export default function TeamDetailPage() {
   }
 
   const tc      = getTeamColor(detail.name);
+  const carImg  = getCarImage(detail.name, selectedSeason);
   const profile = getTeamProfile(detail.name);
 
   /* Average finish — from race_results filtered to positions */
@@ -565,7 +567,7 @@ export default function TeamDetailPage() {
       {/* ── Hero section ────────────────────────────────────────── */}
       <div className="rounded-2xl overflow-hidden" style={{ background: tc }}>
         {/* Top: car image area */}
-        <div className="relative flex items-center justify-center" style={{ minHeight: 260 }}>
+        <div className="relative flex items-center justify-center" style={{ minHeight: 'clamp(180px,35vw,260px)' }}>
           {/* Halftone pattern */}
           <div
             className="absolute inset-0 opacity-10"
@@ -579,6 +581,23 @@ export default function TeamDetailPage() {
             className="absolute inset-0"
             style={{ background: `radial-gradient(ellipse 70% 60% at 50% 50%, rgba(255,255,255,0.08), transparent)` }}
           />
+          {/* Car livery image — right-anchored */}
+          {carImg && (
+            <div className="absolute right-0 bottom-0 top-0 w-[62%] overflow-hidden pointer-events-none">
+              <img
+                src={carImg}
+                alt=""
+                className="absolute bottom-0 right-0 w-full h-full object-contain object-right-bottom"
+                style={{
+                  filter: 'drop-shadow(-16px 0 32px rgba(0,0,0,0.65))',
+                  transform: 'scale(1.06)',
+                  transformOrigin: 'right bottom',
+                  opacity: 0.92,
+                }}
+                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+              />
+            </div>
+          )}
           {/* Team logo — centred, large */}
           <div className="relative z-10 flex items-center justify-center w-full" style={{ minHeight: 220 }}>
             <span className="text-white/[0.06] text-[9rem] font-black uppercase absolute select-none pointer-events-none tracking-tight leading-none">
@@ -603,7 +622,7 @@ export default function TeamDetailPage() {
                 <div key={i} className="w-[3px] h-10 bg-white/30 rotate-[20deg]" />
               ))}
             </div>
-            <h1 className="text-4xl md:text-6xl font-display font-black text-white uppercase tracking-tight leading-none">
+            <h1 className="text-2xl sm:text-4xl md:text-6xl font-display font-black text-white uppercase tracking-tight leading-none">
               {detail.name}
             </h1>
             {/* Right slashes */}
@@ -685,11 +704,11 @@ export default function TeamDetailPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-carbon-800 text-gray-400 text-xs uppercase tracking-wider">
-                  <th className="px-4 py-3 text-left">Round</th>
-                  <th className="px-4 py-3 text-left">Race</th>
-                  <th className="px-4 py-3 text-left">Driver</th>
-                  <th className="px-4 py-3 text-center">Pos</th>
-                  <th className="px-4 py-3 text-right">Pts</th>
+                  <th className="hidden sm:table-cell px-3 sm:px-4 py-3 text-left w-12">Round</th>
+                  <th className="px-3 sm:px-4 py-3 text-left">Race</th>
+                  <th className="px-2 sm:px-4 py-3 text-left">Driver</th>
+                  <th className="px-2 sm:px-4 py-3 text-center">Pos</th>
+                  <th className="px-2 sm:px-4 py-3 text-right">Pts</th>
                 </tr>
               </thead>
               <tbody>
@@ -699,24 +718,26 @@ export default function TeamDetailPage() {
                     className="border-t border-carbon-800 hover:bg-carbon-800/40 transition-colors"
                     style={i % 2 === 0 ? {} : { background: 'rgba(255,255,255,0.015)' }}
                   >
-                    <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{r.round_number}</td>
-                    <td className="px-4 py-2.5 text-white font-medium">{r.race_name}</td>
-                    <td className="px-4 py-2.5">
+                    <td className="hidden sm:table-cell px-3 sm:px-4 py-2.5 text-gray-500 font-mono text-xs">{r.round_number}</td>
+                    <td className="px-3 sm:px-4 py-2.5 text-white font-medium text-xs sm:text-sm leading-tight">
+                      {r.race_name.replace(' Grand Prix', ' GP')}
+                    </td>
+                    <td className="px-2 sm:px-4 py-2.5">
                       <span
-                        className="inline-block px-2 py-0.5 rounded text-xs font-black text-white"
+                        className="inline-block px-1.5 sm:px-2 py-0.5 rounded text-xs font-black text-white"
                         style={{ background: tc }}
                       >
                         {r.driver_code}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-center">
-                      {r.position === 1   ? <span className="text-yellow-400 font-black">🥇 P1</span>
-                      : r.position === 2  ? <span className="text-gray-300 font-black">🥈 P2</span>
-                      : r.position === 3  ? <span className="text-orange-400 font-black">🥉 P3</span>
-                      : r.position        ? <span className="text-gray-300 font-semibold">P{r.position}</span>
+                    <td className="px-2 sm:px-4 py-2.5 text-center">
+                      {r.position === 1   ? <span className="text-yellow-400 font-black text-xs sm:text-sm">🥇 P1</span>
+                      : r.position === 2  ? <span className="text-gray-300 font-black text-xs sm:text-sm">🥈 P2</span>
+                      : r.position === 3  ? <span className="text-orange-400 font-black text-xs sm:text-sm">🥉 P3</span>
+                      : r.position        ? <span className="text-gray-300 font-semibold text-xs sm:text-sm">P{r.position}</span>
                       : <span className="text-gray-500">—</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-right text-white font-bold">
+                    <td className="px-2 sm:px-4 py-2.5 text-right text-white font-bold text-xs sm:text-sm">
                       {r.points > 0 ? r.points : <span className="text-gray-600">0</span>}
                     </td>
                   </tr>

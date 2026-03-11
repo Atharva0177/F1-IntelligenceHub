@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import api from "@/lib/api";
 import { useDataVersion } from "@/lib/useDataVersion";
+import { getDriverImageUrls } from "@/lib/driverImages";
 import type { RaceDetail, Session, LapTime } from "@/types";
 import RaceReplay from './RaceReplay';
 import {
@@ -24,6 +25,26 @@ import {
   AreaChart,
   Area,
 } from "recharts";
+
+function PodiumDriverImg({ driverName, season }: { driverName: string; season: number }) {
+  const parts = driverName.split(' ');
+  // Only try the season year (most likely hit) plus a couple of recent fallbacks
+  const urls = getDriverImageUrls(parts[0] || '', parts.slice(1).join(' ') || '', season, 500).slice(0, 8);
+  const [idx, setIdx] = useState(0);
+  useEffect(() => setIdx(0), [driverName, season]);
+  const src = idx < urls.length ? urls[idx] : '';
+  if (!src) return null;
+  return (
+    <img
+      src={src}
+      alt={driverName}
+      loading="eager"
+      onError={() => setIdx(i => i + 1)}
+      className="absolute bottom-0 right-0 h-[96%] object-contain object-right-bottom pointer-events-none select-none"
+      style={{ opacity: 0.88, filter: 'drop-shadow(-8px 0 16px rgba(0,0,0,0.75))' }}
+    />
+  );
+}
 
 export default function RaceDetailPage() {
   const params = useParams();
@@ -509,10 +530,10 @@ export default function RaceDetailPage() {
   return (
     <div className="space-y-6 animate-fade-in max-w-7xl mx-auto">
       {/* Header */}
-      <div className="bg-gradient-to-br from-carbon-900 via-carbon-800 to-carbon-900 rounded-xl p-6 border border-carbon-700">
+      <div className="bg-gradient-to-br from-carbon-900 via-carbon-800 to-carbon-900 rounded-xl p-4 sm:p-6 border border-carbon-700">
         <div className="flex justify-between items-start mb-2">
           <div>
-            <h1 className="text-3xl font-display font-bold text-white mb-1">
+            <h1 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-white mb-1">
               {race.name}
             </h1>
             <div className="text-sm text-gray-400">
@@ -802,7 +823,13 @@ export default function RaceDetailPage() {
         const sessionType = sessions.find((s) => s.id === selectedSessionId)?.session_type || "Race";
         const isRace = sessionType === "Race";
         const totalPts = sessionResults.reduce((s, r) => s + (r.points || 0), 0);
-        const podium = sessionResults.filter(r => r.position && r.position <= 3).sort((a,b) => a.position - b.position);
+        // Deduplicate by position: keep only one driver per position (the one with most points)
+        const seenPos = new Set<number>();
+        const podium = sessionResults
+          .filter(r => r.position && r.position <= 3)
+          .sort((a, b) => (b.points || 0) - (a.points || 0)) // most points per position first
+          .filter(r => { if (seenPos.has(r.position)) return false; seenPos.add(r.position); return true; })
+          .sort((a, b) => a.position - b.position);
         return (
           <div className="space-y-4">
             {/* ── Header bar ── */}
@@ -819,13 +846,13 @@ export default function RaceDetailPage() {
             </div>
 
             {/* ── Podium banners (Race only) ── */}
-            {isRace && podium.length === 3 && !loadingSessionResults && (() => {
+            {isRace && podium.length >= 3 && !loadingSessionResults && (() => {
               // order: P2 left, P1 center, P3 right
               const order = [podium[1], podium[0], podium[2]];
               const positions = [2, 1, 3];
               const posLabels = ['P2', 'P1', 'P3'];
-              // podium step heights in px — P1 tallest
-              const cardHeights = [160, 200, 140];
+              // podium step heights — P1 tallest; smaller on mobile via inline style with clamp
+              const cardHeights = ['clamp(120px,22vw,160px)', 'clamp(150px,28vw,200px)', 'clamp(105px,19vw,140px)'];
               const posColors = ['#C0C0C0', '#FFD700', '#CD7F32']; // silver, gold, bronze
               return (
                 <div className="flex items-end gap-3">
@@ -849,14 +876,19 @@ export default function RaceDetailPage() {
                         {/* background glow blob */}
                         <div className="absolute -top-6 -right-6 w-32 h-32 rounded-full blur-3xl pointer-events-none"
                           style={{ background: driverCol + '20' }} />
+                        {/* driver photo */}
+                        <PodiumDriverImg driverName={r.driver_name} season={race.season_year} />
+                        {/* left scrim so text stays readable over the photo */}
+                        <div className="absolute inset-0 pointer-events-none"
+                          style={{ background: 'linear-gradient(90deg, rgba(8,8,14,0.85) 0%, rgba(8,8,14,0.55) 45%, transparent 75%)' }} />
 
-                        <div className="relative flex flex-col justify-between h-full px-5 py-4">
+                        <div className="relative flex flex-col justify-between h-full px-3 py-3 sm:px-5 sm:py-4">
                           {/* top row: position number */}
                           <div className="flex items-start justify-between">
-                            <span className="font-black text-4xl leading-none tracking-tighter"
+                            <span className="font-black text-2xl sm:text-4xl leading-none tracking-tighter"
                               style={{ color: posCol, opacity: 0.9 }}>{posLabels[i]}</span>
                             {pts > 0 && (
-                              <span className="text-[11px] font-bold px-2 py-1 rounded-lg border"
+                              <span className="text-[9px] sm:text-[11px] font-bold px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border"
                                 style={{ color: posCol, borderColor: posCol + '50', background: posCol + '18' }}>
                                 {pts} pts
                               </span>
@@ -864,11 +896,11 @@ export default function RaceDetailPage() {
                           </div>
 
                           {/* bottom: driver info */}
-                          <div>
-                            <div className="font-black text-white leading-tight"
-                              style={{ fontSize: isFirst ? 18 : 15 }}>{r.driver_name}</div>
-                            <div className="text-[11px] font-mono font-bold mt-0.5" style={{ color: driverCol }}>{r.driver_code}</div>
-                            <div className="text-gray-600 text-[11px] mt-1 truncate">{r.team_name}</div>
+                          <div className="min-w-0">
+                            <div className="font-black text-white leading-tight truncate text-[13px] sm:text-base"
+                              style={{ fontSize: undefined }}>{r.driver_name}</div>
+                            <div className="text-[10px] sm:text-[11px] font-mono font-bold mt-0.5" style={{ color: driverCol }}>{r.driver_code}</div>
+                            <div className="text-gray-600 text-[10px] sm:text-[11px] mt-1 truncate">{r.team_name}</div>
                           </div>
                         </div>
                       </div>
@@ -888,21 +920,21 @@ export default function RaceDetailPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-white/[0.06]">
-                      <th className="text-left py-3 pl-5 pr-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-12">POS</th>
-                      <th className="text-left py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Driver</th>
-                      <th className="text-left py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Constructor</th>
+                      <th className="text-left py-3 pl-4 sm:pl-5 pr-2 sm:pr-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-10 sm:w-12">POS</th>
+                      <th className="text-left py-3 px-2 sm:px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Driver</th>
+                      <th className="hidden sm:table-cell text-left py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Constructor</th>
                       {isRace ? (
                         <>
-                          <th className="text-center py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-20">Grid</th>
-                          <th className="text-center py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-16">Δ</th>
-                          <th className="text-left py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Status</th>
-                          <th className="text-right py-3 pl-3 pr-5 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-20">PTS</th>
+                          <th className="hidden sm:table-cell text-center py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-20">Grid</th>
+                          <th className="hidden sm:table-cell text-center py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-16">Δ</th>
+                          <th className="text-left py-3 px-2 sm:px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Status</th>
+                          <th className="text-right py-3 pl-2 sm:pl-3 pr-4 sm:pr-5 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-14 sm:w-20">PTS</th>
                         </>
                       ) : (
                         <>
-                          <th className="text-right py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Best Lap</th>
-                          <th className="text-right py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Gap</th>
-                          <th className="text-center py-3 pl-3 pr-5 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-16">Laps</th>
+                          <th className="text-right py-3 px-2 sm:px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Best Lap</th>
+                          <th className="hidden sm:table-cell text-right py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Gap</th>
+                          <th className="text-center py-3 pl-2 sm:pl-3 pr-4 sm:pr-5 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-14 sm:w-16">Laps</th>
                         </>
                       )}
                     </tr>
@@ -920,42 +952,65 @@ export default function RaceDetailPage() {
                       const gridPos = result.grid_position || 0;
                       const delta = isRace && gridPos > 0 && pos ? gridPos - pos : null;
                       const isFinished = result.status === 'Finished' || result.status?.startsWith('+');
-                      const isRetired = isRace && !isFinished;
                       const posLabel = isWinner ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : pos || '-';
 
                       return (
                         <tr key={result.driver_code || index}
                           className="border-b border-white/[0.04] group transition-colors hover:bg-white/[0.03]">
                           {/* Position */}
-                          <td className="py-3.5 pl-5 pr-3">
+                          <td className="py-3 sm:py-3.5 pl-4 sm:pl-5 pr-2 sm:pr-3">
                             <div className={`font-black tabular-nums text-base ${
                               isWinner ? 'text-yellow-400' : isPodium ? 'text-gray-300' : 'text-gray-500'
                             }`}>{posLabel}</div>
                           </td>
 
-                          {/* Driver */}
-                          <td className="py-3.5 px-3">
-                            <div className="flex items-center gap-3">
+                          {/* Driver — on mobile also shows team + grid/delta */}
+                          <td className="py-3 sm:py-3.5 px-2 sm:px-3">
+                            <div className="flex items-center gap-2 sm:gap-3">
                               {/* Color accent bar */}
                               <div className="w-0.5 h-7 rounded-full shrink-0" style={{ background: driverCol }} />
-                              <div>
-                                <div className="font-bold text-white text-[13px] leading-tight">{result.driver_name}</div>
-                                <div className="text-[10px] font-mono tracking-wider mt-0.5" style={{ color: driverCol + 'cc' }}>{result.driver_code}</div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-white text-[13px] leading-tight truncate">{result.driver_name}</div>
+                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                  <span className="text-[10px] font-mono tracking-wider" style={{ color: driverCol + 'cc' }}>{result.driver_code}</span>
+                                  {/* Team name – only on mobile (hidden on sm+ where Constructor column exists) */}
+                                  <span className="sm:hidden text-[10px] text-gray-600 truncate">{result.team_name}</span>
+                                </div>
+                                {/* Grid + delta inline on mobile only */}
+                                {isRace && (gridPos > 0 || delta !== null) && (
+                                  <div className="sm:hidden flex items-center gap-1.5 mt-1">
+                                    {gridPos > 0 && (
+                                      <span className="text-[9px] text-gray-600 font-mono">Grid P{gridPos}</span>
+                                    )}
+                                    {delta !== null && delta !== 0 && (
+                                      <span className={`text-[9px] font-bold font-mono ${
+                                        delta > 0 ? 'text-emerald-400' : 'text-red-400'
+                                      }`}>
+                                        {delta > 0 ? `▲${delta}` : `▼${Math.abs(delta)}`}
+                                      </span>
+                                    )}
+                                    {/* Show gap for non-race on mobile */}
+                                  </div>
+                                )}
+                                {/* Gap inline on mobile for non-race */}
+                                {!isRace && index > 0 && gap && (
+                                  <div className="sm:hidden text-[9px] text-gray-600 font-mono mt-0.5">{gap}</div>
+                                )}
                               </div>
                             </div>
                           </td>
 
-                          {/* Team */}
-                          <td className="py-3.5 px-3 text-gray-500 text-[12px]">{result.team_name}</td>
+                          {/* Team — desktop only */}
+                          <td className="hidden sm:table-cell py-3.5 px-3 text-gray-500 text-[12px]">{result.team_name}</td>
 
                           {isRace ? (
                             <>
-                              {/* Grid */}
-                              <td className="py-3.5 px-3 text-center">
+                              {/* Grid — desktop only */}
+                              <td className="hidden sm:table-cell py-3.5 px-3 text-center">
                                 <span className="text-gray-600 font-mono text-[12px]">{gridPos > 0 ? `P${gridPos}` : '—'}</span>
                               </td>
-                              {/* Delta */}
-                              <td className="py-3.5 px-3 text-center">
+                              {/* Delta — desktop only */}
+                              <td className="hidden sm:table-cell py-3.5 px-3 text-center">
                                 {delta !== null ? (
                                   <span className={`text-[11px] font-bold font-mono px-1.5 py-0.5 rounded-sm ${
                                     delta > 0 ? 'text-emerald-400 bg-emerald-900/30' :
@@ -966,9 +1021,16 @@ export default function RaceDetailPage() {
                                   </span>
                                 ) : <span className="text-gray-700">—</span>}
                               </td>
-                              {/* Status */}
-                              <td className="py-3.5 px-3">
-                                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                              {/* Status — compact on mobile */}
+                              <td className="py-3 sm:py-3.5 px-2 sm:px-3">
+                                {/* Mobile: icon-only dot */}
+                                <span className={`sm:hidden inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] ${
+                                  isFinished ? 'bg-emerald-900/60 text-emerald-400' : 'bg-red-900/40 text-red-400'
+                                }`}>
+                                  {isFinished ? '✓' : '✕'}
+                                </span>
+                                {/* Desktop: full pill */}
+                                <span className={`hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                                   isFinished
                                     ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/50'
                                     : 'bg-red-950/40 text-red-400 border border-red-900/40'
@@ -981,7 +1043,7 @@ export default function RaceDetailPage() {
                                 </span>
                               </td>
                               {/* Points */}
-                              <td className="py-3.5 pl-3 pr-5 text-right">
+                              <td className="py-3 sm:py-3.5 pl-2 sm:pl-3 pr-4 sm:pr-5 text-right">
                                 {(result.points || 0) > 0 ? (
                                   <span className="font-black text-white text-base">{result.points}</span>
                                 ) : (
@@ -991,13 +1053,14 @@ export default function RaceDetailPage() {
                             </>
                           ) : (
                             <>
-                              <td className="py-3.5 px-3 text-right font-mono font-bold text-emerald-400 text-[12px]">
+                              <td className="py-3 sm:py-3.5 px-2 sm:px-3 text-right font-mono font-bold text-emerald-400 text-[12px]">
                                 {bestTime ? formatLapTime(bestTime) : '—'}
                               </td>
-                              <td className="py-3.5 px-3 text-right font-mono text-gray-500 text-[12px]">
+                              {/* Gap — desktop only (shown inline on mobile) */}
+                              <td className="hidden sm:table-cell py-3.5 px-3 text-right font-mono text-gray-500 text-[12px]">
                                 {index === 0 ? <span className="text-emerald-500 font-bold text-[10px]">LEADER</span> : (gap ?? '—')}
                               </td>
-                              <td className="py-3.5 pl-3 pr-5 text-center text-gray-400 text-[12px]">
+                              <td className="py-3 sm:py-3.5 pl-2 sm:pl-3 pr-4 sm:pr-5 text-center text-gray-400 text-[12px]">
                                 {result.laps_completed || result.total_laps || '—'}
                               </td>
                             </>

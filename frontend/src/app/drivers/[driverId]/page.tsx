@@ -94,7 +94,7 @@ export default function DriverDetailPage() {
     <div className="space-y-5 animate-fade-in pb-10">
 
       {/* ── Hero Header ── */}
-      <div className="relative overflow-hidden rounded-3xl" style={{ background: `linear-gradient(135deg, ${tc}18 0%, #07070f 55%)`, border: `1px solid ${tc}40`, minHeight: 280 }}>
+      <div className="relative overflow-hidden rounded-3xl" style={{ background: `linear-gradient(135deg, ${tc}18 0%, #07070f 55%)`, border: `1px solid ${tc}40`, minHeight: 'clamp(220px, 60vw, 320px)' }}>
         {/* top accent */}
         <div className="h-[3px]" style={{ background: `linear-gradient(90deg, transparent, ${tc}, transparent)` }} />
         {/* ambient glow */}
@@ -113,17 +113,17 @@ export default function DriverDetailPage() {
         {/* right scrim over photo */}
         <div className="absolute inset-0 pointer-events-none" style={{ background: 'linear-gradient(90deg, rgba(7,7,15,0.0) 45%, rgba(7,7,15,0.7) 100%)' }} />
 
-        <div className="relative z-10 p-7 md:p-10 flex flex-col justify-between" style={{ minHeight: 280 }}>
+        <div className="relative z-10 p-5 sm:p-7 md:p-10 flex flex-col justify-between" style={{ minHeight: 'clamp(220px, 60vw, 320px)' }}>
           {/* top row */}
-          <div className="flex items-start justify-between gap-4">
-            <Link href={`/drivers?season=${selectedSeason}`} className="text-sm text-gray-500 hover:text-white transition-colors flex items-center gap-1">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4">
+            <Link href={`/drivers?season=${selectedSeason}`} className="text-sm text-gray-500 hover:text-white transition-colors flex items-center gap-1 shrink-0">
               ← Drivers
             </Link>
-            {/* Season selector */}
-            <div className="flex gap-2 flex-wrap justify-end">
+            {/* Season selector — horizontal scroll on mobile, wraps on desktop */}
+            <div className="flex gap-1.5 sm:gap-2 overflow-x-auto sm:overflow-visible sm:flex-wrap sm:justify-end pb-0.5 sm:pb-0">
               {[...availableYears].reverse().map(yr => (
                 <button key={yr} onClick={() => setSelectedSeason(yr)}
-                  className="px-3 py-1 rounded-lg text-xs font-bold transition-all"
+                  className="shrink-0 px-3 py-1 rounded-lg text-xs font-bold transition-all"
                   style={selectedSeason === yr
                     ? { background: tc, color: '#000', boxShadow: `0 0 14px ${tc}66` }
                     : { background: 'rgba(255,255,255,0.06)', color: '#9ca3af', border: '1px solid rgba(255,255,255,0.1)' }
@@ -133,29 +133,29 @@ export default function DriverDetailPage() {
           </div>
 
           {/* bottom identity block */}
-          <div className="mt-8">
+          <div className="mt-3 sm:mt-8">
             <div className="text-xs font-bold tracking-[0.2em] mb-1 uppercase" style={{ color: tc }}>
               {driver.team_name}
             </div>
-            <div className="flex items-baseline gap-4">
-              <h1 className="text-5xl md:text-6xl font-black text-white leading-none tracking-tight">
+            <div className="flex items-baseline gap-2 sm:gap-4">
+              <h1 className="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-none tracking-tight">
                 {driver.first_name}<br />
                 <span className="uppercase">{driver.last_name}</span>
               </h1>
               {(driver.driver_number ?? driver.number) && (
-                <span className="text-6xl font-black leading-none" style={{ color: tc, opacity: 0.6 }}>
+                <span className="hidden sm:inline text-6xl font-black leading-none" style={{ color: tc, opacity: 0.6 }}>
                   #{driver.driver_number ?? driver.number}
                 </span>
               )}
             </div>
-            <div className="flex gap-5 mt-4 text-sm text-gray-400">
+            <div className="flex flex-wrap gap-2 sm:gap-5 mt-3 sm:mt-4 text-xs sm:text-sm text-gray-400">
               {driver.nationality && <span>🌍 {driver.nationality}</span>}
-              {driver.date_of_birth && <span>📅 {new Date(driver.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+              {driver.date_of_birth && <span className="hidden sm:inline">📅 {new Date(driver.date_of_birth).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
               {driver.code && <span className="font-mono font-bold px-2 py-0.5 rounded" style={{ background: `${tc}20`, color: tc }}>{driver.code}</span>}
             </div>
 
             {/* inline key stats */}
-            <div className="flex gap-6 mt-6">
+            <div className="flex gap-4 sm:gap-6 mt-4 sm:mt-6">
               {[
                 { label: 'Points', value: totalPoints, color: tc },
                 { label: 'Wins',   value: wins,        color: '#FFD700' },

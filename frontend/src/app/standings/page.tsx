@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { useDataVersion } from '@/lib/useDataVersion';
 import { getDriverImageUrls } from '@/lib/driverImages';
+import { getCarImage } from '@/lib/carImages';
 import type { DriverStanding, ConstructorStanding } from '@/types';
 
 const TEAM_COLORS: Record<string, string> = {
@@ -62,9 +63,10 @@ function PodiumDriverImg({ driverName, season }: { driverName: string; season: n
     <img
       src={src}
       alt={driverName}
+      loading="eager"
       onError={() => setIdx(i => i + 1)}
-      className="absolute bottom-0 left-1/2 -translate-x-1/2 object-contain object-bottom pointer-events-none select-none"
-      style={{ height: '88%' }}
+      className="absolute bottom-[30%] left-1/2 -translate-x-1/2 object-contain object-bottom pointer-events-none select-none"
+      style={{ height: '65%' }}
     />
   );
 }
@@ -114,7 +116,7 @@ export default function StandingsPage() {
     <div className="space-y-6 animate-fade-in pb-10">
 
       {/* Header */}
-      <section className="relative overflow-hidden rounded-3xl bg-carbon-900 border border-carbon-800 p-7 md:p-10">
+      <section className="relative overflow-hidden rounded-3xl bg-carbon-900 border border-carbon-800 p-5 sm:p-7 md:p-10">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_50%_at_80%_50%,rgba(225,6,0,0.08),transparent)]" />
         {[20, 40, 60, 80].map((t, i) => (
           <div key={i} className="absolute right-0 h-px bg-gradient-to-l from-racing-red-500/20 to-transparent"
@@ -123,7 +125,7 @@ export default function StandingsPage() {
         <div className="relative flex flex-col sm:flex-row sm:items-end justify-between gap-5">
           <div>
             <div className="text-xs text-racing-red-400 font-bold uppercase tracking-widest mb-2">Championship Standings</div>
-            <h1 className="text-4xl md:text-5xl font-display font-bold text-white leading-none">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-display font-bold text-white leading-none">
               {season} <span className="text-gradient-red">Season</span>
             </h1>
             <p className="text-gray-500 text-sm mt-2">Driver &amp; Constructor championship points</p>
@@ -157,18 +159,19 @@ export default function StandingsPage() {
       {!loading && !error && (
         <>
           {/* ── Podium trio ── */}
-          <div className="flex items-end gap-3" style={{ height: 320 }}>
+          <div className="flex items-end gap-2 sm:gap-3" style={{ height: 'clamp(260px, 65vw, 340px)' }}>
             {podiumOrder.map(pi => {
               const item = isDrivers ? podiumD[pi] : podiumC[pi];
               if (!item) return <div key={pi} className="flex-1" />;
               const tc      = teamColor(isDrivers ? (item as DriverStanding).team_name : (item as ConstructorStanding).team_name);
               const metalC  = metalColors[pi];
-              const h       = [295, 240, 210][pi];
+              const h       = [`clamp(210px,58vw,310px)`, `clamp(170px,47vw,255px)`, `clamp(150px,41vw,225px)`][pi];
               const pos     = pi + 1;
               const code    = isDrivers ? (item as DriverStanding).driver_code : '';
               const name    = isDrivers ? (item as DriverStanding).driver_code     : (item as ConstructorStanding).team_name.replace(' F1 Team','').replace(' Racing','');
               const nameB   = isDrivers ? (item as DriverStanding).driver_name     : '';
               const sub     = isDrivers ? (item as DriverStanding).team_name.replace(' F1 Team','').replace(' Racing','') : `${(item as ConstructorStanding).wins} wins`;
+              const carImgUrl = !isDrivers ? getCarImage((item as ConstructorStanding).team_name, season) : undefined;
               return (
                 <div key={pos} className="flex-1 relative rounded-2xl overflow-hidden flex flex-col"
                   style={{ height: h, background: `linear-gradient(155deg, ${tc}22 0%, #07070f 65%)`, border: `1px solid ${tc}50`, boxShadow: `0 8px 48px ${tc}35`, alignSelf: 'flex-end' }}>
@@ -178,9 +181,19 @@ export default function StandingsPage() {
                   <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 0%, ${tc}30, transparent 60%)` }} />
                   {/* large driver photo — centred */}
                   {isDrivers && nameB && <PodiumDriverImg driverName={nameB} season={season} />}
+                  {/* constructor car livery — right-anchored */}
+                  {!isDrivers && carImgUrl && (
+                    <img
+                      src={carImgUrl}
+                      alt=""
+                      className="absolute inset-0 m-auto right-0 w-[90%] h-[70%] object-contain object-right pointer-events-none select-none"
+                      style={{ filter: 'drop-shadow(-10px 0 20px rgba(0,0,0,0.7))', opacity: 0.88 }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                  )}
                   {/* bottom scrim so text stays readable */}
                   <div className="absolute inset-0 pointer-events-none"
-                    style={{ background: 'linear-gradient(to top, rgba(7,7,15,0.95) 0%, rgba(7,7,15,0.5) 35%, transparent 65%)' }} />
+                    style={{ background: 'linear-gradient(to top, rgba(7,7,15,1) 0%, rgba(7,7,15,0.95) 28%, rgba(7,7,15,0.6) 48%, transparent 70%)' }} />
                   {/* watermark pos */}
                   <div className="absolute right-3 bottom-2 font-black leading-none pointer-events-none" style={{ color: metalC, opacity: 0.07, fontSize: 96 }}>P{pos}</div>
                   {/* points badge */}
@@ -190,7 +203,7 @@ export default function StandingsPage() {
                   {/* bottom content */}
                   <div className="mt-auto p-4 pt-0 relative z-10">
                     <div className="text-[11px] font-black tracking-[0.15em] mb-1" style={{ color: metalC }}>P{pos}</div>
-                    <div className="text-white font-black text-2xl leading-none">{name}</div>
+                    <div className="text-white font-black text-lg sm:text-xl md:text-2xl leading-none">{name}</div>
                     {isDrivers && <div className="text-sm text-gray-300 mt-0.5 leading-tight">{nameB}</div>}
                     <div className="text-xs mt-1.5 font-semibold" style={{ color: tc }}>{sub}</div>
                   </div>
@@ -200,7 +213,7 @@ export default function StandingsPage() {
           </div>
 
           {/* ── Quick stats strip ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {(isDrivers ? [
               { label: 'Championship Leader',  value: drivers[0]?.driver_code  ?? '—', sub: `${drivers[0]?.points ?? 0} points`,          color: '#FFD700' },
               { label: 'Gap P1 → P2',          value: `−${(drivers[0]?.points ?? 0) - (drivers[1]?.points ?? 0)}`, sub: 'pts behind leader', color: '#E8002D' },
