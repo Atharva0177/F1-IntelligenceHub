@@ -121,7 +121,7 @@ async def get_seasons(db: Session = Depends(get_db)):
     return {"seasons": season_years}
 
 
-@router.get("/", response_model=List[RaceSchema])
+@router.get("", response_model=List[RaceSchema])
 async def get_races(
     season: Optional[int] = None,
     limit: int = 100,

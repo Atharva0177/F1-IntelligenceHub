@@ -61,7 +61,7 @@ class ConstructorDetailResponse(BaseModel):
         from_attributes = True
 
 
-@router.get("/", response_model=List[ConstructorSummary])
+@router.get("", response_model=List[ConstructorSummary])
 async def get_constructors(db: Session = Depends(get_db)):
     """Get all constructors (teams) in the database."""
     teams = db.query(Team).order_by(Team.name).all()

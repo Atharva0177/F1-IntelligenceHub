@@ -58,7 +58,7 @@ class RaceResultSchema(BaseModel):
         from_attributes = True
 
 
-@router.get("/", response_model=List[DriverListSchema])
+@router.get("", response_model=List[DriverListSchema])
 async def get_drivers(
     skip: int = 0,
     limit: int = 100,

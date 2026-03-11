@@ -55,7 +55,7 @@ async def get_circuit_layout(race_id: int, db: Session = Depends(get_db)):
     }
 
 
-@router.get("/")
+@router.get("")
 async def get_circuits(db: Session = Depends(get_db)):
     """Get all circuits with basic info."""
     circuits = db.query(Circuit).order_by(Circuit.country).all()

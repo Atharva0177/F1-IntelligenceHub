@@ -7,7 +7,8 @@ import os
 app = FastAPI(
     title="F1 Intelligence Hub API",
     description="Comprehensive F1 analytics platform API",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False,
 )
 
 # CORS middleware
