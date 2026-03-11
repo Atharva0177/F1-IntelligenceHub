@@ -1285,7 +1285,7 @@ export default function RaceDetailPage() {
 
                 {/* Legend */}
                 <div className="mt-4 flex flex-wrap gap-3">
-                  {race.results.map((driver) => (
+                  {[...new Map(race.results.map((d: any) => [d.driver_code, d])).values()].map((driver: any) => (
                     <button
                       key={driver.driver_code}
                       onClick={() => {
@@ -2064,7 +2064,7 @@ export default function RaceDetailPage() {
               </h2>
               {/* Driver Selector Chips */}
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1.5">
-                {race.results.map((driver) => (
+                {[...new Map(race.results.map((d: any) => [d.driver_code, d])).values()].map((driver: any) => (
                   <button
                     key={driver.driver_code}
                     onClick={() => {
