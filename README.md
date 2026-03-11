@@ -1,486 +1,234 @@
-# F1 Intelligence Hub
+# 🏎️ F1 Intelligence Hub - Ultimate Analytics Platform
 
-A full-stack Formula 1 analytics platform that ingests official timing data via **FastF1**, stores it in **PostgreSQL / TimescaleDB**, serves it through a **FastAPI** backend, and displays it in a **Next.js 14** frontend. The site auto-refreshes every 30 s when new data is loaded into the database.
+<div align="center">
+  <img src="docs/images/home.png" alt="F1 Intelligence Hub - Home Dashboard" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">
+  <p><i>The F1 IntelliHub Home Dashboard featuring live stats, recent races, and a driver spotlight.</i></p>
+</div>
+
+**F1 Intelligence Hub** is an advanced, full-stack predictive and analytical platform explicitly engineered to harvest, store, and visualize official Formula 1 timing data, telemetry, and race control information. Built using **FastF1, PostgreSQL, TimescaleDB, FastAPI, and Next.js 14**, this platform processes high-frequency telemetry sequences into interactive, dynamic frontend visualizations.
+
+This documentation serves as an extremely exhaustive guide designed to explain the **exact purpose, inner workings, and flow** of every single component within the repository, alongside a complete visual tour of the platform.
 
 ---
 
-## Quick Start — New Device
+## 📸 Platform Tour & Features
 
-The **only prerequisite is Docker Desktop** — no Python, conda, or Node.js needed on the new machine.
+### 1. The Race Hub & Deep Analytics
+The platform provides an unparalleled look into every single race of the season. 
 
-### Step 1 — On your current machine: back up the database
+<div align="center">
+  <img src="docs/images/races.png" alt="Season Races Overview" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">
+  <p><i>The <b>Season Races Hub</b>: A grid view of the entire calendar. Each card highlights the circuit layout outline, date, location, and the winner of the Grand Prix. Top-right filters allow sorting by season year.</i></p>
+</div>
 
-```powershell
-.\scripts\backup.ps1
-```
+Inside a specific Race Detail page, you have access to multiple deeply analytical tabs:
 
-This creates `backups\f1_dump.sql`. Copy the `backups\` folder (and optionally `fastf1_cache\` to avoid re-downloading ~GB of session data) to the new machine alongside the repo.
+<div align="center">
+  <img src="docs/images/race_card1.png" alt="Race Results Grid" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/race_card2.png" alt="Lap-by-Lap Positions" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i><b>Left (Results):</b> The finalized classification grid showing finishing positions, point allocations, time gaps, and fastest laps. <b>Right (Lap-by-Lap Chart):</b> A responsive Recharts line graph tracking every driver's precise position across the entire race duration. Hovering over a lap reveals exact track context and overtakes.</i></p>
 
-### Step 2 — On the new machine: clone + run setup
+<div align="center">
+  <img src="docs/images/race_card3.png" alt="Track Dominance & Telemetry" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/race_card4.png" alt="Live Race Replay Engine" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i><b>Left (Track Dominance):</b> Real-time telemetry overlay on the 2D circuit map. Glowing neon segments indicate precise braking, throttle, and top-speed zones per driver. <b>Right (Live Race Replay):</b> An advanced engine utilizing <code>requestAnimationFrame</code>. It physically animates driver "dots" along the SVG track path, simulating the race live alongside rolling DRS activation zones.</i></p>
 
-```powershell
-git clone <your-repo-url>
-cd openf2
 
-# Builds all Docker images, starts services, and offers to restore backup
-.\setup.ps1
-```
+<div align="center">
+  <img src="docs/images/race_card5.png" alt="Tire Strategy & Pit Stops" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/race_card6.png" alt="Sector Times" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i><b>Left (Tire Strategy):</b> A detailed timeline showing precisely which tire compounds (Soft/Medium/Hard/Inter/Wet) were used, stint lengths, and pit-stop durations. <b>Right (Sector Pace):</b> Comparative sector time analysis broken down into micro-sectors, allowing clear identification of where drivers lost or gained time.</i></p>
 
-`setup.ps1` detects `backups\f1_dump.sql` and asks whether to restore it. Answer **y**.
+<div align="center">
+  <img src="docs/images/race_card7.png" alt="Weather Timeline" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/race_card8.png" alt="Race Control & Flags" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i><b>Left (Weather):</b> A session-long environmental timeline charting track temperature, air temperature, and humidity percentages. <b>Right (Race Control):</b> A chronological, searchable feed of official FIA steward messages, flagging incidents, safety cars, and penalties as they occurred.</i></p>
 
-### Step 3 — Done
+#### Qualifying Details
+<div align="center">
+  <img src="docs/images/quali_card1.png" alt="Qualifying Results" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/quali_card2.png" alt="Q1, Q2, Q3 Time Breakdown" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i>A distinct breakdown of the Qualifying shootout structure. Evaluates who was knocked out in Q1 vs Q2, alongside the dominant pole-lap times constructed in Q3.</i></p>
 
-| URL | Service |
-|---|---|
-| `http://localhost:3000` | Frontend |
-| `http://localhost:8000` | Backend API |
-| `http://localhost:8000/docs` | Interactive API docs |
+---
 
-> **No backup? Load fresh data — still entirely inside Docker:**
+### 2. Championship Standings
+View the ongoing war for the Driver and Constructor championships.
+
+<div align="center">
+  <img src="docs/images/standings.png" alt="Standings Overview" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">
+  <p><i><b>The Championship Hub:</b> Featuring an automatically generated top-3 podium graphic derived from point totals, followed by a total-field horizontal bar chart. You can seamlessly toggle views between Drivers and Constructors standings for any historic year.</i></p>
+</div>
+<br>
+<div align="center">
+  <img src="docs/images/driver_standings.png" alt="Driver Standings Table" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/team_standings.png" alt="Team Standings Table" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i>The raw tabulated standings list calculating accrued points per race, sorted descending. Shows driver profiles alongside their current constructor associations.</i></p>
+
+---
+
+### 3. Drivers & Constructor Profiles
+Dedicated hubs for every single entity on the grid.
+
+<div align="center">
+  <img src="docs/images/drivers.png" alt="Drivers Roster" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/driver_card.png" alt="Driver Profile Detail" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i><b>Left (Driver Roster):</b> A filterable, scannable grid showcasing every driver in a given season, styled with their official headshots. <b>Right (Profile Focus):</b> Deep-dives into an individual driver's career stats, accumulated points across seasons, and head-to-head ratios against teammates.</i></p>
+
+<div align="center">
+  <img src="docs/images/teams.png" alt="Constructors Roster" width="49%" style="display:inline-block; border-radius: 8px; margin-right: 1%;">
+  <img src="docs/images/team_card.png" alt="Team Profile Detail" width="49%" style="display:inline-block; border-radius: 8px;">
+</div>
+<p><i><b>Left (Constructors):</b> Team-colored cards displaying the full constructor line up and current point tallies. <b>Right (Team Profile):</b> Highlights the official team machine (livery), historical race outcomes, and the direct performance comparison between their two drivers.</i></p>
+
+---
+
+### 4. Season Analytics
+<div align="center">
+  <img src="docs/images/analytics.png" alt="Global Season Analytics" width="100%" style="border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.5);">
+  <p><i><b>The Command Center Analytic Dash:</b> An immersive top-level view comparing global metrics. Here you witness macro-trends like absolute team dominance (points ratios), season win distributions among drivers, and comparative reliability scores via vast Recharts visual graphs.</i></p>
+</div>
+
+---
+
+## 🧭 1. What is the Project Flow?
+
+The F1 IntelliHub architecture operates as a robust, decoupled pipeline, cleanly separating ingestion, storage, API serving, and client-side rendering.
+
+1. **Data Ingestion (The Loader)**: Utilizing the Python `fastf1` library, the backend scripts parse and digest high-frequency data files (`.ff1pkl`) directly from live-timing caches or the Jolpi.ca F1 Ergast API mirror.
+2. **Data Transformation & Aggregation**: Raw pandas DataFrames are converted into standard Python dictionaries and lists. Positional variables, vectors, and floating-point errors are safely pre-cast.
+3. **Database Population (The Store)**: The data is aggressively bulk-inserted into a **PostgreSQL 14** database. Crucially, raw telemetry time-series points (speed, throttle, brake, gear, RPM, DRS, XYZ coordinates) are written into a **TimescaleDB hypertable**, allowing for rapid query aggregations over millions of rows.
+4. **Backend API (The Engine)**: A **FastAPI** application connects to this PostgreSQL instance via SQLAlchemy. It acts as the gatekeeper, serving strictly typed JSON responses (validated via Pydantic) to the frontend.
+5. **Frontend Rendering (The Interface)**: A globally distributed **Next.js 14** application fetches from these REST endpoints and uses specialized libraries (like Recharts) to draw lap-time charts, SVG circuit maps, interactive race replays, and rich driver dashboards.
+6. **Live Auto-Refresh Mechanism**: To provide a live-feel, the frontend polls `/api/races/data-version` every 30 seconds. If the backend reports an increased version identifier (triggered by new ingestion), the frontend invalidates its cache and naturally fetches the newly available race data.
+
+---
+
+## 🏗️ 2. Extensive Architecture Breakdown
+
+### The Backend Ecosystem (Python / FastAPI / Postgres)
+The core of the data lies in `backend/database/models.py`. The design mimics a highly normalized relational model bounded by large time-series telemetry dumps:
+- `Season` holds `Race` events.
+- `Race` holds `Session` entities (e.g., FP1, FP2, Qualifying, Sprint, Race).
+- Each `Session` triggers thousands of nested entries: `LapTime`, `Result`, `PitStop`, `WeatherData`, and `RaceControlMessage`.
+- `TelemetryData` tracks every microsecond movement of every car on track (often netting hundreds of thousands of rows per race). This is managed by TimescaleDB to stop standard Postgres B-Trees from degrading.
+
+### The Frontend Ecosystem (React / Next.js 14 / Tailwind)
+Built to look modern, dark, and sleek, using Next.js App Router.
+- The UI uses TailwindCSS for responsive layouts and glassmorphism.
+- Charts and data are displayed heavily relying on explicit APIs `useDataVersion` for state checking.
+- The `RaceReplay` engine explicitly calculates SVG boundaries and animates div markers simulating cars based on `PositionData` downsampled chunks.
+
+### Infrastructure & Containerization
+The whole application requires strictly zero local dependencies natively other than Docker.
+`docker-compose.yml` ties together:
+1. `postgres` (TimescaleDB)
+2. `backend` (FastAPI)
+3. `frontend` (Next.js)
+4. `loader` (Ephemeral Python instance triggered manually to sync new data)
+
+---
+
+## 📂 3. Exact File-by-File Technical Dictionary
+
+### 📁 Root Directory
+- **`docker-compose.yml`**: Defines the virtual network `f1_network`. Manages volume mapping for `postgres_data` and binds the frontend and backend ports explicitly.
+- **`setup.ps1`**: A convenience PowerShell script for Windows users. It initializes Docker, builds the images, and creates the default `.env` environment.
+- **`README.md`**: This exact comprehensive file.
+- **`COMMANDS.md`**: Specialized local developer commands reference.
+
+### 📁 `backend/` Directory (The API)
+This folder is purely dedicated to Python code.
+
+- **`main.py`**: The top-level FastAPI bootstrap. It loads `.env`, initiates CORS middleware (Crucial for the Next.js port 3000 to interact with Port 8000), maps all routing modules from `api/routes`, and calls `init_db()` to auto-migrate.
+- **`requirements.txt`**: Pinned Python dependencies. Main packages: `fastapi`, `uvicorn`, `sqlalchemy`, `fastf1`, `pandas`, `psycopg2-binary`.
+
+#### 📂 `backend/database/` (ORM & Storage logic)
+- **`config.py`**: Sets up `sqlalchemy.create_engine` linking to PostgreSQL. Creates the declarative base `Base` used across the app. Contains `get_db` generator for HTTP dependency injection.
+- **`models.py`**: Absolute core DB schemas mapped to Python objects. Contains classes like `Circuit`, `Driver`, `Team`, `Race`, `Session`, `LapTime`, and the massive `TelemetryData`.
+- **`schemas.sql`**: Native SQL script. Crucial function: Converts the `telemetry_data` table into a TimescaleDB hypertable partitioned by `timestamp`.
+
+#### 📂 `backend/data_pipeline/` (The Ingestion Logics)
+- **`fastf1_client.py`**: Wraps the somewhat clunky `fastf1` native library. Sets up caching (`fastf1_cache/`) and points Ergast lookups to the `jolpi.ca` mirror to bypass deprecated F1 Ergast endpoints. Exposes reliable methods like `get_lap_data()` securely.
+- **`data_processor.py`**: The mapping layer. Takes pure Pandas DataFrames (which FastF1 yields) and iteratively strips out NA's/NaNs, converting datetimes and casting variable types into standard Python dicts to prevent SQL insertion faults.
+- **`db_operations.py`**: Contains `DatabaseOperations`. Has highly optimized methods like `bulk_insert_lap_times` and `bulk_insert_telemetry`. These methods are entirely idempotent, utilizing SQL `ON CONFLICT DO NOTHING` logic so you can run the sync infinitely securely.
+
+#### 📂 `backend/api/routes/` (The REST endpoints)
+- **`races.py`**: Main traffic route. Exposes `/api/races/` for getting calendar data, and `/api/races/data-version` for frontend polling. Also handles the extremely complex `/replay-data` which combines lap data and DRS limits.
+- **`drivers.py` & `constructors.py`**: Gets profile information and aggregates championship points over time.
+- **`telemetry.py`**: The heaviest endpoint. Dumps raw XY coordinates and speed metrics to the client for the "Track Dominance" feature.
+- **`standings.py`, `analytics.py`, `circuits.py`, `h2h.py`, `weather.py`**: Fetch granular specific details as implied by their names.
+
+### 📁 `frontend/` Directory (The Interface)
+A Next.js 14 App Router project.
+
+- **`tailwind.config.js`**: Specifies custom dark theme colors, fonts, and animation constraints.
+- **`next.config.js`**: Maps external image domains and sets strict mode.
+
+#### 📂 `frontend/public/`
+- **`circuits/*.json`**: Geolocation boundary points for drawing the tracks on a 2D plane. Generated dynamically by the backend python script.
+- **`races/` & `team-cars/`**: Theme assets for the UI.
+
+#### 📂 `frontend/src/app/` (Next.js Pages)
+- **`page.tsx` (Home)**: Displays the animated stats block, recent races grid, and top profiles.
+- **`races/page.tsx`**: Roster of all races mapped in cards with winners highlighted.
+- **`races/[raceId]/page.tsx`**: The crown jewel nested page. Contains heavy tab management to switch between Results, Lap Times, Positions, Strategy and Weather tabs.
+- **`races/[raceId]/RaceReplay.tsx`**: The actual live replay visualizer component.
+- **`standings/page.tsx` & `drivers/page.tsx` & `teams/page.tsx`**: Primary roster views.
+- **`analytics/page.tsx`**: Heavy Recharts logic.
+
+#### 📂 `frontend/src/components/` & `frontend/src/lib/`
+- **`lib/api.ts`**: A massive Axios SDK wrapper defining strict types for every single API endpoint available in the backend.
+- **`lib/useDataVersion.ts`**: The polling hero. Fires a background `setTimeout` recursion to keep the frontend updated quietly.
+
+### 📁 `scripts/` Directory (CLI Utilities)
+- **`initial_data_load.py`**: The most important script. `python scripts/initial_data_load.py 2026 --sync` will crawl F1 results, see what the database lacks, and patch it in automatically.
+- **`recreate_database.py`**: Wipes everything and drops schemas.
+- **`generate_circuit_coords.py`**: Analyzes telemetry XY plots to generate the actual JSON mapping shape of a race track.
+- **`backup.ps1` & `restore.ps1`**: Tools to safely dump the `postgres` Docker container to disk.
+
+---
+
+## 🚀 4. Comprehensive Setup Guide
+
+There are exactly two ways to run this: **The Docker Way (Recommended)** or **The Local Dev Way**.
+
+### Method A: Immediate Setup (The Docker Way) 🐳
+The entire environment comes with its own containers. You need **Docker Desktop**. This is the only prerequisite—no Python, conda, or Node.js needed on the new machine.
+
+1. **Clone the Repository**: 
+   ```powershell
+   git clone https://github.com/Atharva0177/F1-IntelliHub.git
+   cd F1-IntelliHub
+   ```
+2. **Run the Automatic Setup Script**: 
+   ```powershell
+   # Builds all Docker images, starts services, and offers to restore from a backup
+   .\setup.ps1
+   ```
+   - This script creates `.env`, brings up Postgres, FastAPI, and Next.js instantly.
+   - If it detects `backups\f1_dump.sql`, it will ask whether to restore it. Answer **y**.
+3. **Access the Platform**:
+   - Frontend: `http://localhost:3000`
+   - Backend API: `http://localhost:8000`
+   - Interactive Swagger API Docs: `http://localhost:8000/docs`
+
+> **No backup? Load fresh data inside Docker:**
 > ```powershell
 > docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync
 > ```
 
----
+### Method B: Raw Local Development Setup 🐍 + 🌐
+If you want to edit Python files instantly without rebuilding containers, you will need Python 3.11+, Node.js 18+, and PostgreSQL 14+ with TimescaleDB.
 
-## Table of Contents
-
-1. [What It Does](#1-what-it-does)
-2. [Architecture Overview](#2-architecture-overview)
-3. [Project Structure](#3-project-structure)
-4. [File-by-File Reference](#4-file-by-file-reference)
-   - [Root](#root)
-   - [Backend](#backend)
-   - [Frontend](#frontend)
-   - [Scripts](#scripts)
-5. [Setup Guide](#5-setup-guide)
-   - [Prerequisites](#prerequisites)
-   - [Database](#database)
-   - [Backend](#backend-1)
-   - [Frontend](#frontend-1)
-   - [Loading Data](#loading-data)
-6. [CLI Reference — Data Loading](#6-cli-reference--data-loading)
-7. [API Quick Reference](#7-api-quick-reference)
-8. [Environment Variables](#8-environment-variables)
-9. [Docker (optional)](#9-docker-optional)
-
----
-
-## 1. What It Does
-
-| Feature | Description |
-|---|---|
-| **Race Results** | Full grid results for every session (FP1–FP3, Q, Sprint, Race) across all loaded seasons |
-| **Lap Times** | Per-lap sector times, tire compounds, pit-in/out markers for every driver |
-| **Telemetry** | Fastest-lap speed, throttle, brake, gear, RPM, and DRS on a per-driver basis |
-| **Track Dominance** | Side-by-side driver telemetry overlay on a 2-D circuit map |
-| **Race Replay** | Animated lap-by-lap position replay with a DRS zone overlay |
-| **Strategy** | Stint breakdown, tire compound usage, pit stop timing |
-| **Standings** | Driver and constructor championship standings with a historical podium view |
-| **Drivers & Teams** | Profile pages for every driver and constructor with per-season stats |
-| **Analytics** | Season-level points, wins, and consistency charts |
-| **Weather** | Track/air temperature and humidity per session |
-| **Race Control** | Flags, safety cars, and steward decisions per session |
-| **Auto-refresh** | The frontend polls `/api/races/data-version` every 30 s and refetches data automatically when the DB changes |
-
----
-
-## 2. Architecture Overview
-
-```
-FastF1 library
-     │  fetches from F1 live-timing + Jolpi.ca Ergast mirror
-     ▼
-scripts/initial_data_load.py   ← one-shot or --sync runs
-     │  bulk-inserts via SQLAlchemy
-     ▼
-PostgreSQL 14 + TimescaleDB    ← telemetry_data is a hypertable
-     │
-     ▼
-FastAPI (backend/main.py)      ← uvicorn, port 8000
-     │  /api/* REST endpoints
-     ▼
-Next.js 14 (frontend/)         ← port 3000
-     ├── polls /api/races/data-version every 30 s
-     └── all pages are 'use client' + useEffect data-fetching
-```
-
-**Data flow summary:**
-1. Run the load script once per season/race.
-2. FastF1 downloads and caches raw session data (`.ff1pkl` files) in `fastf1_cache/`.
-3. The script processes and bulk-inserts into Postgres.
-4. FastAPI exposes the data over a REST API.
-5. Next.js renders it; the `useDataVersion` hook triggers automatic page refetches when new data arrives.
-
----
-
-## 3. Project Structure
-
-```
-openf2/
-├── docker-compose.yml          # Single-command Docker stack
-├── README.md                   # This file
-│
-├── backend/
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── main.py                 # FastAPI app entry point
-│   ├── api/
-│   │   └── routes/
-│   │       ├── analytics.py
-│   │       ├── circuits.py
-│   │       ├── constructors.py
-│   │       ├── drivers.py
-│   │       ├── h2h.py
-│   │       ├── race_control.py
-│   │       ├── races.py        # Also contains /data-version endpoint
-│   │       ├── session_status.py
-│   │       ├── sessions.py
-│   │       ├── standings.py
-│   │       ├── telemetry.py
-│   │       └── weather.py
-│   ├── data_pipeline/
-│   │   ├── data_processor.py
-│   │   ├── db_operations.py
-│   │   └── fastf1_client.py
-│   └── database/
-│       ├── config.py
-│       ├── models.py
-│       └── schemas.sql
-│
-├── frontend/
-│   ├── Dockerfile
-│   ├── next.config.js
-│   ├── package.json
-│   ├── tailwind.config.js
-│   ├── public/
-│   │   ├── circuits/           # Auto-generated circuit coordinate JSON files
-│   │   ├── races/              # Race hero images
-│   │   └── team-cars/          # Team livery images
-│   └── src/
-│       ├── app/
-│       │   ├── page.tsx               # Home / dashboard
-│       │   ├── races/page.tsx         # Season race list
-│       │   ├── races/[raceId]/
-│       │   │   ├── page.tsx           # Race detail (results, laps, replay, strategy)
-│       │   │   └── RaceReplay.tsx     # Animated replay component
-│       │   ├── standings/page.tsx
-│       │   ├── drivers/page.tsx
-│       │   ├── teams/page.tsx
-│       │   ├── teams/[teamId]/page.tsx
-│       │   └── analytics/page.tsx
-│       ├── components/
-│       │   ├── Layout/Navbar.tsx
-│       │   ├── RaceControl/
-│       │   ├── Session/
-│       │   ├── Tabs/
-│       │   ├── TrackMap/
-│       │   └── Weather/
-│       ├── lib/
-│       │   ├── api.ts              # Axios client + all API methods
-│       │   ├── useDataVersion.ts   # 30-s polling hook for auto-refresh
-│       │   ├── circuitLayouts.ts   # Static circuit layout metadata
-│       │   └── driverImages.ts     # Driver headshot URL helpers
-│       └── types/index.ts          # Shared TypeScript interfaces
-│
-├── scripts/
-│   ├── initial_data_load.py    # Main data ingestion script
-│   ├── recreate_database.py    # Drop + recreate all tables
-│   ├── generate_circuit_coords.py  # Standalone circuit JSON generator
-│   ├── generate_circuit_svgs.py    # Generate SVG circuit outlines
-│   ├── backup.ps1              # Dump DB → backups\f1_dump.sql
-│   └── restore.ps1             # Restore DB from backups\f1_dump.sql
-│
-├── setup.ps1                   # One-command new-device bootstrap
-├── .env.example                # Environment variable template
-│
-└── fastf1_cache/               # FastF1 local cache (gitignored)
-    ├── 2018/
-    ├── 2021/
-    └── 2026/
-```
-
----
-
-## 4. File-by-File Reference
-
-### Root
-
-| File | Purpose |
-|---|---|
-| `docker-compose.yml` | Defines three services: `postgres` (TimescaleDB), `backend` (FastAPI), `frontend` (Next.js). All wired together on a private `f1_network`. |
-| `README.md` | This document. |
-
----
-
-### Backend
-
-#### `backend/main.py`
-FastAPI application entry point. Configures CORS (reads allowed origins from `CORS_ORIGINS` env var), registers all route modules under `/api/*`, and calls `init_db()` on startup to create any missing tables.
-
-#### `backend/requirements.txt`
-Python dependencies for the backend. Key packages:
-- `fastapi` + `uvicorn` — web framework and ASGI server
-- `sqlalchemy` + `psycopg2-binary` — ORM and PostgreSQL driver
-- `fastf1==3.8.1` — official F1 timing data library
-- `pandas` + `numpy` — data processing
-- `python-dotenv` — `.env` file loading
-
-#### `backend/database/config.py`
-Creates the SQLAlchemy `engine` and `SessionLocal` from the `DATABASE_URL` environment variable. Also exports the `Base` metaclass used by all models, an `init_db()` helper that calls `Base.metadata.create_all()`, and a FastAPI `get_db()` dependency that yields a session and closes it afterwards.
-
-#### `backend/database/models.py`
-SQLAlchemy ORM models, one class per database table:
-
-| Model | Table | Description |
-|---|---|---|
-| `Season` | `seasons` | Year identifier; parent of all race data |
-| `Circuit` | `circuits` | Track name, country, GPS coordinates, length |
-| `Driver` | `drivers` | 3-letter code, number, name, nationality |
-| `Team` | `teams` | Constructor name and nationality |
-| `Race` | `races` | Round number, date, links to Season + Circuit |
-| `Session` | `sessions` | FP1/FP2/FP3/Q/Sprint/Race; child of Race |
-| `LapTime` | `lap_times` | Per-lap sector times, tire compound, track status |
-| `TelemetryData` | `telemetry_data` | Timestamp-keyed speed/throttle/brake/gear/DRS/XYZ. TimescaleDB hypertable. |
-| `PositionData` | `position_data` | Downsampled XYZ for track map animation |
-| `PitStop` | `pit_stops` | Pit lap, duration |
-| `Result` | `results` | Final classification; `is_sprint` flag separates Sprint results |
-| `Qualifying` | `qualifying` | Q1/Q2/Q3 times per driver |
-| `WeatherData` | `weather_data` | Air/track temp, humidity, rainfall flag per timestamp |
-| `RaceControlMessage` | `race_control_messages` | Flag, category, message text |
-| `SessionStatus` | `session_status` | Session state transitions (started, red flag, etc.) |
-
-#### `backend/database/schemas.sql`
-Raw SQL that sets up the TimescaleDB hypertable on `telemetry_data` and creates composite indexes. Run automatically by the Docker `init.sql` entrypoint.
-
-#### `backend/data_pipeline/fastf1_client.py`
-Thin wrapper around the `fastf1` library. On init it:
-- Redirects the Ergast API calls to the `jolpi.ca` mirror (original ergast.com is retired)
-- Enables the local disk cache (`fastf1_cache/`)
-
-Key methods: `get_event_schedule(year)`, `get_session(year, round, type)`, `get_lap_data(session)`, `get_driver_list(session)`, `get_weather_data(session)`.
-
-Also exports `get_telemetry_safe(lap)` — a helper that pre-casts position columns to `float64` before FastF1's internal merge to suppress dtype-mismatch warnings.
-
-#### `backend/data_pipeline/data_processor.py`
-Static methods that transform raw FastF1 DataFrames into lists of plain dicts ready for DB insertion:
-- `process_lap_data(laps)` — maps FastF1 lap columns to `LapTime` fields
-- `process_telemetry_data(telemetry, driver_code, lap_number, session_start)` — maps car data + position columns
-- `process_weather_data(weather, session_start)` — maps weather columns
-- `process_race_control_messages(session, session_start)` — extracts race_control DataFrame
-- `process_session_status(session, session_start)` — extracts session_status DataFrame
-
-#### `backend/data_pipeline/db_operations.py`
-`DatabaseOperations` class (takes a `db` session in its constructor). Provides:
-- `get_or_create_season/circuit/driver/team/race/session` — upsert helpers, safe to call repeatedly
-- `bulk_insert_lap_times(processed_laps, db_session)` — skips entire session if lap data already exists (idempotent)
-- `bulk_insert_telemetry(processed_telemetry, db_session)` — skips per-driver if telemetry already loaded (idempotent)
-- `bulk_insert_weather`, `bulk_insert_race_control_messages`, `bulk_insert_session_status`
-
-#### `backend/api/routes/races.py`
-Largest route file. Endpoints under `/api/races/`:
-
-| Method + Path | Description |
-|---|---|
-| `GET /seasons` | List all years with data |
-| `GET /` | All races (optionally filtered by `?season=`) |
-| `GET /calendar/{year}` | Season calendar including future rounds |
-| `GET /{raceId}` | Race detail with full result grid |
-| `GET /{raceId}/sessions` | List sessions for a race |
-| `GET /{raceId}/lap-times` | Lap times (optional `?driver_code=`) |
-| `GET /{raceId}/positions` | Position-over-lap data for chart |
-| `GET /{raceId}/replay-data` | Laps + driver metadata for animated replay |
-| `GET /{raceId}/drs-telemetry` | DRS zone boundaries + per-driver distance arrays |
-| `GET /data-version` | Returns `{"version": N}` (max session/result ID) used by the frontend auto-refresh hook |
-
-#### `backend/api/routes/drivers.py`
-`GET /api/drivers` (list, filterable by `?season=`), `GET /api/drivers/{id}` (profile with career stats), `GET /api/drivers/{id}/results`, `GET /api/drivers/{id1}/compare/{id2}`.
-
-#### `backend/api/routes/standings.py`
-`GET /api/standings/{year}/drivers`, `GET /api/standings/{year}/constructors`. Both accept an optional `?round=` to get standings at a specific point in the season.
-
-#### `backend/api/routes/constructors.py`
-`GET /api/constructors` (all teams), `GET /api/constructors/{id}` (detail + race results for a given `?season=`).
-
-#### `backend/api/routes/sessions.py`
-`GET /api/sessions/{sessionId}/results`, `GET /api/sessions/{sessionId}/lap-times`.
-
-#### `backend/api/routes/telemetry.py`
-`GET /api/telemetry/{sessionId}` — returns telemetry points, filterable by `driver_code` and `lap_number`. `GET /api/telemetry/track/{circuitId}` — returns XY track coordinates.
-
-#### `backend/api/routes/analytics.py`
-`GET /api/analytics/pace-analysis`, `/tire-strategies`, `/sector-times` — all require a `?session_id=` parameter.
-
-#### `backend/api/routes/weather.py`
-`GET /api/weather/{sessionId}`, `GET /api/weather/{sessionId}/summary`.
-
-#### `backend/api/routes/race_control.py`
-`GET /api/race-control/{sessionId}` — returns race control messages (flags, SC, VSC).
-
-#### `backend/api/routes/session_status.py`
-`GET /api/session-status/{sessionId}`.
-
-#### `backend/api/routes/circuits.py`
-`GET /api/circuits`, `GET /api/circuits/{id}`, `GET /api/circuits/{id}/history`.
-
-#### `backend/api/routes/h2h.py`
-`GET /api/h2h/{driverId1}/{driverId2}` — head-to-head comparison with optional `?season=`.
-
----
-
-### Frontend
-
-#### `frontend/src/lib/api.ts`
-Axios instance (`baseURL = NEXT_PUBLIC_API_URL || http://localhost:8000`) plus a typed `api` object exposing every backend endpoint as an async method. All other files import from here — never use raw `axios` elsewhere.
-
-#### `frontend/src/lib/useDataVersion.ts`
-React hook that polls `GET /api/races/data-version` every 30 seconds. Returns a `refreshKey` integer. When the backend version increases (i.e., new data was loaded), `refreshKey` increments, which is used as a dependency in every page's data-fetching `useEffect` to trigger automatic refetches without a page reload.
-
-#### `frontend/src/lib/circuitLayouts.ts`
-Auto-generated TypeScript file mapping circuit names to normalized SVG path strings (1000×1000 viewport) plus metadata (round, country, location). Updated automatically by `scripts/initial_data_load.py` whenever a new Race session is processed. Used by the `TrackMap` components for static circuit outline rendering.
-
-#### `frontend/src/lib/driverImages.ts`
-Generates ordered lists of candidate headshot URLs per driver code. The UI tries each URL in sequence and falls back to a placeholder.
-
-#### `frontend/src/types/index.ts`
-All TypeScript interfaces shared across the app: `Race`, `RaceDetail`, `Driver`, `Session`, `LapTime`, `TelemetryPoint`, `DriverStanding`, `ConstructorStanding`, `CalendarRound`, `ConstructorDetail`, `H2HResponse`, `CircuitGuide`, etc.
-
-#### `frontend/src/app/layout.tsx`
-Root layout: wraps all pages with the `Navbar` and applies global CSS / font imports.
-
-#### `frontend/src/app/page.tsx` — **Home**
-Animated stats counter (total races, drivers) + recent race cards + driver spotlight grid. Fetches seasons → races + drivers for the latest year. Wired to `useDataVersion`.
-
-#### `frontend/src/app/races/page.tsx` — **Season Race List**
-Season selector (from URL `?season=`). Grid of race cards with circuit map previews, dates, and winner badges. Wired to `useDataVersion`.
-
-#### `frontend/src/app/races/[raceId]/page.tsx` — **Race Detail**
-Tabbed interface:
-- **Results** — full starting grid / finishing order table
-- **Sessions** — per-session result tables (Q1/Q2/Q3, Sprint, FP)
-- **Positions** — lap-by-lap position chart (Recharts `LineChart`)
-- **Lap Times** — stacked lap time chart per selected driver
-- **Strategy** — stint/tire compound breakdown + pit stop timeline
-- **Replay** — animated race replay (delegates to `RaceReplay.tsx`)
-- **Track Dominance** — telemetry comparison overlay on the circuit map
-- **Weather** — temperature + humidity timeline
-- **Race Control** — chronological flag/message feed
-
-#### `frontend/src/app/races/[raceId]/RaceReplay.tsx` — **Race Replay Component**
-Stateful component that animates driver positions along the circuit path using `requestAnimationFrame`. Uses the `/replay-data` and `/drs-telemetry` API responses. Shows a feature card overlay with real-time speed, gear, throttle, brake, and DRS status when telemetry is available.
-
-#### `frontend/src/app/standings/page.tsx` — **Championship Standings**
-Podium display (P1 centre, P2 left, P3 right) + horizontal bar chart for the full field. Toggle between Drivers and Constructors. Season selector. Wired to `useDataVersion`.
-
-#### `frontend/src/app/drivers/page.tsx` — **Driver Roster**
-Season-filtered grid of driver cards sorted by points. Search bar. Links to individual driver pages. Wired to `useDataVersion`.
-
-#### `frontend/src/app/teams/page.tsx` — **Constructor Roster**
-Season-filtered team cards with driver line-ups and team colours. Links to individual team pages. Wired to `useDataVersion`.
-
-#### `frontend/src/app/teams/[teamId]/page.tsx` — **Team Detail**
-Constructor profile with race results, driver comparison, and per-season stats. Wired to `useDataVersion`.
-
-#### `frontend/src/app/analytics/page.tsx` — **Analytics**
-Season-level bar charts: team points, driver points, wins by driver. Filterable by season via URL param. Wired to `useDataVersion`.
-
-#### `frontend/src/components/Layout/Navbar.tsx`
-Top navigation bar with links to all main sections, a season indicator, and responsive mobile menu.
-
-#### `frontend/src/components/TrackMap/`
-SVG-based 2-D circuit map used in the race detail and replay views.
-
-#### `frontend/src/components/Weather/`
-Weather timeline chart component (temperature + humidity mini-chart).
-
-#### `frontend/src/components/RaceControl/`
-Chronological race control message list with colour-coded flag indicators.
-
-#### `frontend/src/components/Session/`
-Session tab selector and session result table components.
-
-#### `frontend/src/components/Tabs/`
-Generic accessible tab strip used across the race detail page.
-
-#### `frontend/public/circuits/`
-Auto-generated JSON files (one per circuit) containing `x`, `y`, `corners`, `rotation`, and `name` fields (rotated XY for the live replay map). Created by `scripts/initial_data_load.py` when a Race session is first processed, or by running `scripts/generate_circuit_coords.py` standalone.
-
----
-
-### Scripts
-
-#### `scripts/initial_data_load.py` — **Primary data ingestion tool**
-
-Loads a full F1 season (or a specific round range) into the database. All operations are idempotent — safe to re-run.
-
-```
-python scripts/initial_data_load.py [year] [options]
-```
-
-Per session it loads: results, lap times, telemetry (fastest lap per driver), weather, race control messages, and session status. For each Race session it also generates `public/circuits/<slug>.json` (rotated XY coordinates for the live map) and upserts the normalized SVG path into `src/lib/circuitLayouts.ts` (used by the static track display) — both only when they don't already exist.
-
-See [Section 6](#6-cli-reference--data-loading) for all flags.
-
-#### `scripts/recreate_database.py`
-Drops **all** tables (with `CASCADE`) and recreates them from the SQLAlchemy models. Use when you need a clean slate.
-
-```
-python scripts/recreate_database.py
-```
-
-> ⚠️ This is destructive. All data will be lost.
-
-#### `scripts/generate_circuit_coords.py`
-Standalone script to regenerate a single circuit's coordinate JSON from FastF1 telemetry data. Useful if a specific circuit file is missing or corrupted without re-running a full data load.
-
-```python
-from scripts.generate_circuit_coords import extract_circuit_coords
-extract_circuit_coords(2021, 1, "Bahrain Grand Prix")
-```
-
-#### `scripts/generate_circuit_svgs.py`
-Standalone utility that regenerates the full `src/lib/circuitLayouts.ts` file for an entire season in one pass. SVG generation is now also integrated into `initial_data_load.py` (runs automatically per race during a normal load); use this script only if you need to bulk-regenerate all SVG layouts independently of a data load.
-
-#### `scripts/backup.ps1` — **Database backup**
-Dumps the running `f1_postgres` container to `backups\f1_dump.sql` (plus a timestamped copy). Also reports `fastf1_cache` size so you know whether to copy it.
-
-```powershell
-.\scripts\backup.ps1
-```
-
-#### `scripts/restore.ps1` — **Database restore**
-Restores `backups\f1_dump.sql` (or a custom file via `-File`) into the running `f1_postgres` container.
-
-```powershell
-.\scripts\restore.ps1
-# or: .\scripts\restore.ps1 -File backups\f1_dump_2026-03-10.sql
-```
-
-#### `setup.ps1` — **New-device bootstrap**
-One-command setup for a freshly cloned repo. Creates `.env`, starts Docker Compose, and offers to restore a database backup if one is present in `backups\`.
-
-```powershell
-.\setup.ps1
-```
-
----
-
-## 5. Setup Guide
-
-### Prerequisites
-
-| Requirement | Version | Notes |
-|---|---|---|
-| Python | 3.11+ | Use a Conda environment (recommended) |
-| Node.js | 18+ | LTS version recommended |
-| PostgreSQL | 14+ | With TimescaleDB extension installed |
-| FastF1 | 3.8.1 | Must be installed in the Python env used for data loading |
-
-### Database
-
-1. **Install TimescaleDB** following the [official guide](https://docs.timescale.com/self-hosted/latest/install/) for your OS, or use Docker (see [Section 9](#9-docker-optional)).
-
-2. **Create the database and user:**
+1. **Database Initialization:**
    ```sql
    CREATE USER f1user WITH PASSWORD 'f1password';
    CREATE DATABASE f1_intelligence_hub OWNER f1user;
@@ -488,213 +236,186 @@ One-command setup for a freshly cloned repo. Creates `.env`, starts Docker Compo
    CREATE EXTENSION IF NOT EXISTS timescaledb;
    ```
 
-3. The application creates tables automatically on first start via `init_db()`. The `schemas.sql` file sets up the TimescaleDB hypertable and indexes; if using Docker this runs automatically via the `init.sql` entrypoint.
-
-### Backend
-
-1. **Create and activate a Conda environment (recommended):**
+2. **Backend Process (Python/FastAPI):**
    ```bash
    conda create -n f1 python=3.12
    conda activate f1
-   ```
-
-2. **Install dependencies:**
-   ```bash
    pip install -r backend/requirements.txt
-   ```
 
-3. **Configure environment variables.** Create a `.env` file in the project root (or in `backend/`):
-   ```env
-   DATABASE_URL=postgresql://f1user:f1password@localhost:5432/f1_intelligence_hub
-   DB_HOST=localhost
-   DB_PORT=5432
-   DB_NAME=f1_intelligence_hub
-   DB_USER=f1user
-   DB_PASSWORD=f1password
-   FASTF1_CACHE_DIR=./fastf1_cache
-   CORS_ORIGINS=http://localhost:3000
-   ```
+   # Create your .env file
+   echo "DATABASE_URL=postgresql://f1user:f1password@localhost:5432/f1_intelligence_hub" > .env
+   echo "FASTF1_CACHE_DIR=./fastf1_cache" >> .env
+   echo "CORS_ORIGINS=http://localhost:3000" >> .env
 
-4. **Start the backend:**
-   ```bash
    cd backend
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
-   API docs available at `http://localhost:8000/docs`.
 
-### Frontend
-
-1. **Install Node dependencies:**
+3. **Frontend Process (Next.js):**
    ```bash
    cd frontend
    npm install
-   ```
-
-2. **Configure the API URL** (optional — defaults to `http://localhost:8000`):
-   ```env
-   # frontend/.env.local
-   NEXT_PUBLIC_API_URL=http://localhost:8000
-   ```
-
-3. **Start the dev server:**
-   ```bash
    npm run dev
    ```
-   Opens at `http://localhost:3000`.
+   Your dev server is now active at `http://localhost:3000`.
 
-### Loading Data
+---
 
-With the backend running and database ready, load one or more seasons:
+## 🛠️ 5. The CLI Loaders / Data Ingestion
+
+The entire platform's lifeblood is the FastF1 scraper logic in `scripts/initial_data_load.py`.
+
+With your environment activated (or via `docker compose run --rm loader`), you execute the scraper:
 
 ```bash
-# Activate the conda env first
-conda activate f1
+# Full Load — Automatically detects and loads the current year
+python scripts/initial_data_load.py 
 
-# Full load — current year (auto-detected)
-python scripts/initial_data_load.py
-
-# Full load — specific year
-python scripts/initial_data_load.py 2021
-
-# Sync — inspects DB and loads only what is missing
+# Smart-Sync (RECOMMENDED) — Inspects DB per round and loads only exactly what is missing
 python scripts/initial_data_load.py 2026 --sync
 
-# Load a specific round only
-python scripts/initial_data_load.py 2021 --from-round 1 --to-round 1
+# Backfill telemetry only (Skip API wait times if Results/Laps exist)
+python scripts/initial_data_load.py 2026 --telemetry-only --skip-circuits
 
-# Backfill telemetry only (results + laps already in DB)
-python scripts/initial_data_load.py 2021 --telemetry-only --skip-circuits
+# Load an isolated specific round
+python scripts/initial_data_load.py 2026 --from-round 1 --to-round 3
 ```
 
-FastF1 downloads and caches raw session files in `fastf1_cache/`. A full season load (all sessions, all data types) takes roughly 20–60 minutes depending on internet speed; subsequent runs are much faster since cached files are reused.
+> **Performance Note**: FastF1 caches gigabytes of session data during the first load in `./fastf1_cache/`. A full season load might take ~45 minutes initially. Subsequent `--sync` runs take **seconds** since cached files prevent network downloads.
 
 ---
 
-## 6. CLI Reference — Data Loading
+## 🖧 6. Essential Next.js / FastAPI Quick Routes Reference
 
-```
-python scripts/initial_data_load.py [year] [options]
-```
+API Base URL: `http://localhost:8000`
 
-| Argument / Flag | Default | Description |
+| Endpoint Focus | Route Example | Description |
 |---|---|---|
-| `year` (positional) | current year | Season to load (e.g. `2021`, `2026`) |
-| `--from-round N` | `1` | Skip rounds before N (resume interrupted load) |
-| `--to-round N` | all | Stop after round N |
-| `--results-only` | off | Load Race results only — skip laps, telemetry, weather, messages |
-| `--telemetry-only` | off | Load Race telemetry only — sessions must already exist in DB |
-| `--skip-circuits` | off | Skip generating `public/circuits/*.json` coordinate files and skip updating `circuitLayouts.ts` SVG paths |
-| `--sync` | off | Smart sync: inspect DB per round and load only what is missing |
+| **Broad Scope** | `GET /api/races?season=2026` | Delivers the calendar summary for a whole year. |
+| **Race Flow** | `GET /api/races/{id}/lap-times` | Feeds the heavy Recharts stacked Lap Time charts. |
+| **Telemetry Heavy** | `GET /api/telemetry/{sessionId}` | Dumps raw XY coords + speed strings for Track Dominance. |
+| **Animation Engine** | `GET /api/races/{id}/replay-data` | Synchronized positioning packets for the live Replay visualizer. |
+| **Strategy Engine** | `GET /api/analytics/tire-strategies` | Returns stint analysis, used by the Strategy tab. |
+| **Frontend Poller** | `GET /api/races/data-version` | Returns scalar `{"version": N}` to alert Next.js of DB changes. |
 
-The `--sync` flag is the recommended way to keep data current. It classifies each completed round as:
-- **FULL** — no results or no laps → runs a full load for that round
-- **TELEM_ONLY** — results + laps present but no telemetry → telemetry backfill only
-- **COMPLETE** — all data present → skip
-
-All inserts are idempotent; re-running will not create duplicates.
+Check out the interactive Swagger sandbox at `http://localhost:8000/docs` to test every single endpoint explicitly.
 
 ---
 
-## 7. API Quick Reference
+## 🌍 7. How to Make This Website Public (Deployment Guide)
 
-Base URL: `http://localhost:8000`
+Want to share your F1 IntelliHub with the world so anyone can access it on their phone or computer? Here is the exact, extremely detailed "newbie-friendly" guide on how to take this project from your local computer and put it on the public internet for **free**.
 
-| Endpoint | Description |
-|---|---|
-| `GET /api/races/seasons` | Available season years |
-| `GET /api/races?season=2026` | All races for a season |
-| `GET /api/races/calendar/{year}` | Full calendar including future rounds |
-| `GET /api/races/{id}` | Race detail + grid results |
-| `GET /api/races/{id}/sessions` | Sessions for a race |
-| `GET /api/races/{id}/lap-times` | Lap times (optional `?driver_code=`) |
-| `GET /api/races/{id}/positions` | Lap-by-lap positions for chart |
-| `GET /api/races/{id}/replay-data` | Replay laps + driver metadata |
-| `GET /api/races/{id}/drs-telemetry` | DRS zones + telemetry arrays |
-| `GET /api/races/data-version` | `{"version": N}` — DB change fingerprint |
-| `GET /api/drivers?season=2026` | Driver list for season |
-| `GET /api/drivers/{id}/results` | Driver race results |
-| `GET /api/standings/{year}/drivers` | Driver championship |
-| `GET /api/standings/{year}/constructors` | Constructor championship |
-| `GET /api/sessions/{id}/results` | Session classification |
-| `GET /api/sessions/{id}/lap-times` | Session lap times |
-| `GET /api/telemetry/{sessionId}` | Telemetry points |
-| `GET /api/analytics/pace-analysis?session_id=` | Pace stats |
-| `GET /api/analytics/tire-strategies?session_id=` | Stint analysis |
-| `GET /api/circuits` | All circuits |
-| `GET /api/constructors/{id}?season=2026` | Team detail + season results |
-| `GET /api/h2h/{id1}/{id2}?season=2026` | Head-to-head comparison |
-| `GET /api/weather/{sessionId}/summary` | Weather summary |
-| `GET /api/race-control/{sessionId}` | Race control messages |
+We need to host three things: Let's break it down.
 
-Full interactive docs: `http://localhost:8000/docs`
+### Step 1: Host the Database (Neon or Timescale Cloud)
+Your computer currently runs PostgreSQL in Docker. To make it public, we need a cloud database.
+
+1. Go to **[Neon.tech](https://neon.tech/)** (or Timescale Cloud) and create a free account.
+2. Click **Create a New Project**. Name it `f1-intellihub-db`.
+3. It will give you a **Connection Details** string that looks like this:
+   `postgresql://username:password@ep-cool-butterfly-123456.us-east-2.aws.neon.tech/neondb`
+4. **Copy this URL and save it somewhere safe.** This is your new `DATABASE_URL`.
+5. On your local computer, open `./.env` and change your `DATABASE_URL` to this new link.
+6. Run the local Python script `initial_data_load.py` one more time. Instead of saving to your computer, it will securely upload all the F1 data into your new cloud database!
+
+### Step 2: Host the Python Backend (Render or Railway)
+Your FastAPI backend acts as the bridge between the database and the website. We'll put this on **Render**.
+
+1. Create a free account on **[Render.com](https://render.com/)**, and link it to your GitHub account.
+2. Ensure your code is pushed firmly to a GitHub repository.
+3. On Render, click **New +** -> **Web Service**.
+4. Select your `F1-IntelliHub` repository from the list.
+5. Apply these settings:
+   - **Name**: `f1-intellihub-api`
+   - **Language**: Python
+   - **Root Directory**: `backend`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `uvicorn main:app --host 0.0.0.0 --port 10000`
+6. Scroll down to **Environment Variables** and add:
+   - `DATABASE_URL` -> *(Paste the Neon link from Step 1)*
+   - `CORS_ORIGINS` -> `*` *(This allows any website to talk to your API for now)*
+7. Click **Create Web Service**. Wait 5-10 minutes. 
+8. Render will give you a live URL, like `https://f1-intellihub-api.onrender.com`. Save this!
+
+### Step 3: Host the Next.js Frontend (Vercel)
+This is the beautiful website people will actually see. **Vercel** makes hosting Next.js apps incredibly easy.
+
+1. Go to **[Vercel.com](https://vercel.com/)** and sign up using your GitHub account.
+2. Click **Add New Project** and select your `F1-IntelliHub` repository.
+3. In the Configuration screen, match these settings:
+   - **Framework Preset**: Next.js
+   - **Root Directory**: `frontend`
+4. Open the **Environment Variables** section and add:
+   - Name: `NEXT_PUBLIC_API_URL`
+   - Value: `https://f1-intellihub-api.onrender.com` *(Paste your exact Render URL from Step 2)*
+5. Click **Deploy**. Vercel will install the packages, build your website, and put it on the public internet.
+6. It will give you a live URL (e.g., `https://f1-intellihub.vercel.app`).
+
+### 🎉 Step 4: You Are Live!
+Go to the Vercel link on your phone. The website will load, it will quietly ask your Render backend for the F1 data, the Render backend will fetch it from your Neon database, and the charts will magically appear!
 
 ---
 
-## 8. Environment Variables
+## 🏠 8. How to Host Publicly from Your Own Local Machine (Advanced)
 
-| Variable | Default | Required | Description |
-|---|---|---|---|
-| `DATABASE_URL` | `postgresql://postgres:0708@localhost:5432/f1_intelligence_hub` | ✅ | Full Postgres connection string |
-| `DB_HOST` | `localhost` | | Postgres host (used by Docker) |
-| `DB_PORT` | `5432` | | Postgres port |
-| `DB_NAME` | `f1_intelligence_hub` | | Database name |
-| `DB_USER` | `postgres` | | Database user |
-| `DB_PASSWORD` | — | ✅ | Database password |
-| `FASTF1_CACHE_DIR` | `./fastf1_cache` | | Path for FastF1 local cache |
-| `CORS_ORIGINS` | `http://localhost:3000` | | Comma-separated allowed origins |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | | API base URL (frontend env var) |
+If you have a powerful PC that you leave running and don't want to use Render or Vercel, you can share your exact local Docker instance with the public internet using **Ngrok**, **DynuDNS**, and URL Forwarding.
+
+This method requires your computer to remain on and connected to the internet.
+
+### Step 1: Install and Start Ngrok
+Ngrok creates a secure tunnel from the public internet directly to your localhost port.
+
+1. Create a free account at **[ngrok.com](https://ngrok.com/)**.
+2. Download and install the Ngrok agent for your OS.
+3. Authenticate your agent in your terminal using your provided authtoken:
+   ```bash
+   ngrok config add-authtoken <your-auth-token>
+   ```
+4. Start a tunnel pointing to your Next.js Frontend port (3000):
+   ```bash
+   ngrok http 3000
+   ```
+5. Ngrok will output a Forwarding URL that looks something like this:
+   `https://a1b2c3d4e5f6.ngrok-free.app` -> `http://localhost:3000`
+
+### Step 2: Configure the Backend URL
+Since the frontend is now being accessed from the wider internet, Next.js can no longer just look for `localhost:8000` (because "localhost" on a stranger's phone is the phone itself, not your PC).
+
+1. Open a second terminal window. You need to tunnel your backend port (8000) as well.
+2. Run:
+   ```bash
+   ngrok http 8000
+   ```
+3. Copy this **Backend Ngrok URL** (e.g., `https://backend123.ngrok-free.app`).
+4. In your frontend repository, open `frontend/.env.local` (or your system environment variables) and set:
+   ```env
+   NEXT_PUBLIC_API_URL=https://backend123.ngrok-free.app
+   ```
+5. Restart your frontend server (`npm run dev` or restart your Docker compose).
+
+### Step 3: Get a Custom Domain via DynuDNS
+Ngrok URLs randomly change every time you restart the process on the free tier. We will use DynuDNS to create a permanent address people can remember.
+
+1. Go to **[Dynu.com](https://www.dynu.com/)** and create a free account.
+2. Click **DDNS Services** and add a new hostname (e.g., `my-f1-hub.dynu.net`).
+3. Under the settings for your new hostname, look for **Web Redirect** or **Web Forwarding**.
+4. Enable URL Forwarding and paste your **Frontend Ngrok URL** (`https://a1b2c3d4e5f6.ngrok-free.app`) into the destination URL field.
+5. Save your settings.
+
+### 🏁 Step 4: The Result
+Now, whenever someone types `http://my-f1-hub.dynu.net` into their browser:
+1. DynuDNS redirects them seamlessly to your temporary Frontend Ngrok URL.
+2. Ngrok tunnels the request straight into your running Next.js instance on your desktop.
+3. Your Next.js app asks your temporary Backend Ngrok URL for data.
+4. Ngrok tunnels that request straight into your FastAPI backend on your desktop.
+
+*Note: Whenever you reboot your PC, you will need to start both Ngrok tunnels again and update the URL in DynuDNS and `NEXT_PUBLIC_API_URL`.*
 
 ---
 
-## 9. Docker — Full Stack (no local tools required)
-
-The entire project runs in Docker. **Docker Desktop is the only prerequisite** — no Python, conda, or Node.js installation needed on the host machine.
-
-### Services
-
-| Service | Image | Port | Description |
-|---|---|---|---|
-| `postgres` | `timescale/timescaledb:latest-pg14` | 5432 | Database |
-| `backend` | built from `backend/Dockerfile` | 8000 | FastAPI (uvicorn) |
-| `frontend` | built from `frontend/Dockerfile` | 3000 | Next.js dev server |
-| `loader` | built from `Dockerfile.loader` | — | Data ingestion (run-once) |
-
-### Start / stop
-
-```bash
-# Build images and start postgres + backend + frontend
-docker compose up -d --build
-
-# View logs
-docker compose logs -f backend
-docker compose logs -f frontend
-
-# Stop everything (data persists in the postgres_data volume)
-docker compose down
-```
-
-### Load data (all inside Docker — no conda needed)
-
-```bash
-# First-time full load for a season
-docker compose run --rm loader python scripts/initial_data_load.py 2026
-
-# Smart sync — only loads what is missing
-docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync
-
-# Specific round only
-docker compose run --rm loader python scripts/initial_data_load.py 2026 --from-round 3 --to-round 3
-```
-
-The loader writes `public/circuits/*.json` and `src/lib/circuitLayouts.ts` back to the host via bind mounts, and caches all FastF1 session data in `fastf1_cache/`.
-
-### Rebuild after code changes
-
-```bash
-# Rebuild just the loader (e.g. after editing a script)
-docker compose build loader
-
-# Rebuild everything
-docker compose build
-```
-
+<div align="center">
+<i>F1 Intelligence Hub is an advanced open-source analytical tool for motorsports passionates, built iteratively to handle infinite layers of telemetry safely.</i>
+<br><br>
+<b>Enjoy the race. 🏁</b>
+</div>
