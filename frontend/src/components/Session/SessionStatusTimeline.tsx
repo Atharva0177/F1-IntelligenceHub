@@ -21,7 +21,7 @@ export default function SessionStatusTimeline({ sessionId }: SessionStatusTimeli
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/session-status/${sessionId}`);
+        const response = await axios.get(`/api/session-status/${sessionId}`);
         setEvents(response.data);
       } catch (error) {
         console.error('Error fetching session status:', error);

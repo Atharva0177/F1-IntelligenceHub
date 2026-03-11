@@ -25,7 +25,7 @@ export default function WeatherWidget({ sessionId }: WeatherWidgetProps) {
   useEffect(() => {
     const fetchWeather = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/weather/${sessionId}/summary`);
+        const response = await axios.get(`/api/weather/${sessionId}/summary`);
         setWeather(response.data);
       } catch (error) {
         console.error('Error fetching weather:', error);

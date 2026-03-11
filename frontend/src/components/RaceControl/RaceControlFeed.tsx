@@ -32,7 +32,7 @@ export default function RaceControlFeed({ sessionId, limit = 10 }: RaceControlFe
         if (filter) params.append('category', filter);
 
         const response = await axios.get(
-          `http://localhost:8000/api/race-control/${sessionId}?${params.toString()}`
+          `/api/race-control/${sessionId}?${params.toString()}`
         );
         setMessages(response.data);
       } catch (error) {

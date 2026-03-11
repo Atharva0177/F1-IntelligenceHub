@@ -20,7 +20,7 @@ import type {
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: '',  // relative — proxied through Next.js rewrites to backend
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

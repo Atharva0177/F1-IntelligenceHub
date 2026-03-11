@@ -22,7 +22,7 @@ export default function FlagTimeline({ sessionId }: FlagTimelineProps) {
   useEffect(() => {
     const fetchFlags = async () => {
       try {
-        const response = await axios.get(`http://localhost:8000/api/race-control/${sessionId}/flags`);
+        const response = await axios.get(`/api/race-control/${sessionId}/flags`);
         setFlags(response.data);
       } catch (error) {
         console.error('Error fetching flags:', error);
