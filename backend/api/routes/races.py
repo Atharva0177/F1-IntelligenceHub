@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from database.config import get_db
-from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData
+from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData, RaceControlMessage
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date, datetime
@@ -437,7 +437,37 @@ async def get_race_replay_data(race_id: int, db: Session = Depends(get_db)):
         if r.driver
     }
 
-    return {"laps": laps, "drivers": drivers}
+    # Race control messages for the race session (flags & safety car only)
+    rc_rows = (
+        db.query(RaceControlMessage)
+        .filter(
+            RaceControlMessage.session_id == race_session.id,
+            RaceControlMessage.category.in_(["Flag", "SafetyCar"]),
+        )
+        .order_by(RaceControlMessage.timestamp)
+        .all()
+    )
+    race_control = [
+        {
+            "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+            "category": msg.category,
+            "message": msg.message,
+            "flag": msg.flag,
+            "status": msg.status,
+            "scope": msg.scope,
+        }
+        for msg in rc_rows
+    ]
+
+    # Provide the session start time so the frontend can compute message elapsed times
+    session_start_iso = race_session.date.isoformat() if race_session.date else None
+
+    return {
+        "laps": laps,
+        "drivers": drivers,
+        "race_control": race_control,
+        "session_start": session_start_iso,
+    }
 
 
 @router.get("/{race_id}/drs-telemetry")

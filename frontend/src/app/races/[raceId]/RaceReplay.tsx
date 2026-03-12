@@ -46,12 +46,51 @@ interface DriverInfo {
   status?: string;
 }
 
+interface RcMsg {
+  timestamp: string | null;
+  category: string;
+  message: string;
+  flag: string | null;
+  status: string | null;
+  scope: string | null;
+}
+
+/** Map a race control message to the same kind codes used by track status */
+function classifyRcMessage(msg: RcMsg): 'sc' | 'vsc' | 'yellow' | 'red' | null {
+  const cat = (msg.category || '').toLowerCase();
+  const flag = (msg.flag || '').toUpperCase();
+  const status = (msg.status || '').toUpperCase();
+  if (cat === 'safetycar') {
+    if (status.includes('VIRTUAL') || status.includes('VSC') || flag.includes('VSC')) return 'vsc';
+    return 'sc';
+  }
+  if (cat === 'flag') {
+    if (flag === 'RED') return 'red';
+    if (flag === 'YELLOW' || flag.includes('YELLOW')) return 'yellow';
+  }
+  return null;
+}
+
+/**
+ * Parse a race control message timestamp as elapsed seconds since the session start.
+ * Both timestamps must be ISO strings. Returns -1 if unavailable.
+ */
+function rcMsgElapsed(msgTimestamp: string | null, sessionStart: string | null): number {
+  if (!msgTimestamp || !sessionStart) return -1;
+  const msgMs = new Date(msgTimestamp).getTime();
+  const startMs = new Date(sessionStart).getTime();
+  if (isNaN(msgMs) || isNaN(startMs)) return -1;
+  return (msgMs - startMs) / 1000;
+}
+
 interface Props {
   race: RaceDetail;
   positionData: LapRow[];
   driverColors: Record<string, string>;
   weatherSummary?: any;
   driverInfo?: Record<string, DriverInfo>;
+  raceControlMessages?: RcMsg[];
+  sessionStart?: string | null;
   drsTelemetry?: {
     drs_zones: { start: number; end: number }[];
     zone_count: number;
@@ -99,7 +138,7 @@ function fmtLap(s: number): string {
   return `${m}:${sec}`;
 }
 
-export default function RaceReplay({ race, positionData, driverColors, weatherSummary, driverInfo, drsTelemetry }: Props) {
+export default function RaceReplay({ race, positionData, driverColors, weatherSummary, driverInfo, drsTelemetry, raceControlMessages = [], sessionStart = null }: Props) {
   const [circuitPts, setCircuitPts] = useState<{ x: number; y: number }[]>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -162,23 +201,6 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
     }
     return best;
   }, [cumulativeTimelines]);
-  /* ── Track status ticks for the scrubber (start of each flagged lap) ── */
-  const lapStatusTicks = useMemo(() => {
-    if (!leaderTimeline || maxTime <= 0) return [];
-    const lapStatus: Record<number, string> = {};
-    for (const d of positionData) {
-      if (d.track_status && d.lap_number !== undefined)
-        lapStatus[d.lap_number] = d.track_status;
-    }
-    const ticks: { pct: number; t: number; kind: string }[] = [];
-    const { lapNums, cum } = leaderTimeline;
-    for (let i = 0; i < lapNums.length; i++) {
-      const kind = classifyTrackStatus(lapStatus[lapNums[i]]);
-      if (!kind) continue;
-      ticks.push({ pct: (cum[i] / maxTime) * 100, t: cum[i], kind });
-    }
-    return ticks;
-  }, [leaderTimeline, positionData, maxTime]);
 
   /* ── Status intervals: contiguous runs of same flag/SC/VSC ─────────── */
   const lapStatusIntervals = useMemo(() => {
@@ -212,6 +234,53 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
     }
     return null;
   }, [lapStatusIntervals, currentTime]);
+
+  /* Index of the currently active interval within lapStatusIntervals (-1 if none) */
+  const activeIntervalIndex = useMemo(() => {
+    if (!activeTrackStatus) return -1;
+    for (let i = 0; i < lapStatusIntervals.length; i++) {
+      const iv = lapStatusIntervals[i];
+      if (currentTime >= iv.start && currentTime < iv.end) return i;
+    }
+    return -1;
+  }, [lapStatusIntervals, currentTime, activeTrackStatus]);
+
+  /* Race control messages grouped by their nearest lapStatusInterval index.
+   * Uses absolute timestamps: elapsed = (msgTimestamp - sessionStart) seconds,
+   * which aligns with the cumulative lap time scale. Tolerance ±120s to handle
+   * messages that arrive slightly before or after the lap-data status change. */
+  const rcMessagesByInterval = useMemo(() => {
+    const result: Record<number, RcMsg[]> = {};
+    if (!raceControlMessages.length || !lapStatusIntervals.length) return result;
+    for (const msg of raceControlMessages) {
+      const kind = classifyRcMessage(msg);
+      if (!kind) continue;
+      const elapsed = rcMsgElapsed(msg.timestamp, sessionStart);
+      let best = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < lapStatusIntervals.length; i++) {
+        const iv = lapStatusIntervals[i];
+        if (iv.kind !== kind) continue;
+        if (elapsed >= 0) {
+          // Match to interval by elapsed time with ±120s tolerance
+          if (elapsed >= iv.start - 120 && elapsed < iv.end + 120) {
+            best = i; break;
+          }
+          const dist = Math.min(Math.abs(elapsed - iv.start), Math.abs(elapsed - iv.end));
+          if (dist < bestDist) { bestDist = dist; best = i; }
+        } else {
+          // No usable timestamp — append to first matching-kind interval
+          if (best < 0) best = i;
+          break;
+        }
+      }
+      if (best >= 0) {
+        if (!result[best]) result[best] = [];
+        result[best].push(msg);
+      }
+    }
+    return result;
+  }, [raceControlMessages, lapStatusIntervals, sessionStart]);
   /* ── Circuit load ─────────────────────────────────────────────────── */
   useEffect(() => {
     const slug = race.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -289,6 +358,43 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
     return map;
   }, [positionData]);
 
+  /* ── Dynamic pit-exit fraction per driver per pit-out lap ────────────
+   * A pit-out lap's time = racing lap time + pit stop time.
+   * We estimate the pit stop fraction as (pit_out_time - ref_time) / pit_out_time
+   * where ref_time is the driver's 25th-percentile clean lap time.
+   * This avoids the fixed-20% assumption failing for long/short stops.
+   */
+  const driverPitExitFracs = useMemo(() => {
+    const result: Record<string, Record<number, number>> = {};
+    for (const [driver, pitOutLapSet] of Object.entries(driverPitOutLaps)) {
+      result[driver] = {};
+      const lapTimes = driverLapTimes[driver] ?? {};
+      // Clean laps = laps that are neither pit-in nor pit-out
+      const cleanTimes = (Object.entries(lapTimes) as [string, number][])
+        .filter(([n]) => {
+          const lapNum = Number(n);
+          return !driverPitInLaps[driver]?.has(lapNum) && !pitOutLapSet.has(lapNum);
+        })
+        .map(([, t]) => t)
+        .filter(t => t > 20)
+        .sort((a, b) => a - b);
+      // 25th-percentile as reference (faster than median, avoids SC laps bloating ref)
+      const refIdx = Math.floor(cleanTimes.length * 0.25);
+      const refLapTime = cleanTimes.length > 0 ? cleanTimes[refIdx] : 90;
+      pitOutLapSet.forEach(pitOutLap => {
+        const lapTime = lapTimes[pitOutLap];
+        if (!lapTime || lapTime <= refLapTime) {
+          result[driver][pitOutLap] = 0.18; // fallback ~18%
+          return;
+        }
+        // Fraction of the pit-out lap driven in the pit lane
+        const pitFrac = (lapTime - refLapTime) / lapTime;
+        result[driver][pitOutLap] = Math.min(0.80, Math.max(0.10, pitFrac));
+      });
+    }
+    return result;
+  }, [driverPitOutLaps, driverPitInLaps, driverLapTimes]);
+
   /* ── Driver positions ─────────────────────────────────────────────── */
   const driverPositions = useMemo(() => {
     const N = circuitPts.length;
@@ -317,24 +423,45 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
       const lo = bsearch(cum, currentTime);
       const frac = (currentTime - cum[lo]) / (cum[lo + 1] - cum[lo] || 1);
       const currentLapNum = lapNums[lo] ?? lo + 1;
-      const prevLapNum = lo > 0 ? lapNums[lo - 1] : null;
 
-      // Driver is in pit if:
-      // • current lap is a pit-in lap (they are entering/in the pits)
-      // • OR previous lap was pit-in and current lap is pit-out and they haven't
-      //   exited yet (frac < 0.4 = still leaving pit lane)
+      const PIT_ENTRY_FRAC = 0.88; // last ~12% of pit-in lap = entering pit lane
+
+      const isPitInLap  = !!(driverPitInLaps[driver]?.has(currentLapNum));
+      const isPitOutLap = !!(driverPitOutLaps[driver]?.has(currentLapNum));
+      // Use lap-number arithmetic (currentLapNum - 1) rather than lapNums[lo-1]
+      // so detection still works when the pit-in lap is missing from the timeline.
+      const prevWasPitIn = !!(driverPitInLaps[driver]?.has(currentLapNum - 1));
+
+      // Dynamic pit-exit fraction from pre-computed table; fallback to 18%
+      const pitExitFrac = (isPitOutLap && prevWasPitIn)
+        ? (driverPitExitFracs[driver]?.[currentLapNum] ?? 0.18)
+        : 0.18;
+
+      // Driver is in pit when:
+      // • current lap is a pit-in lap AND they've reached the pit lane entry (~12% before end)
+      // • OR current lap is pit-out AND pit stop time hasn't elapsed yet
       const isInPit =
-        !!(driverPitInLaps[driver]?.has(currentLapNum)) ||
-        !!(prevLapNum !== null && driverPitInLaps[driver]?.has(prevLapNum) &&
-           driverPitOutLaps[driver]?.has(currentLapNum) && frac < 0.4);
+        (isPitInLap  && frac >= PIT_ENTRY_FRAC) ||
+        (isPitOutLap && prevWasPitIn && frac < pitExitFrac);
 
-      const ptIdx = isInPit ? 0 : Math.min(Math.floor(frac * N), N - 1);
+      let ptIdx: number;
+      if (isInPit) {
+        // Park at the start/finish area (index 0) which is near the pit exit on most circuits
+        ptIdx = 0;
+      } else if (isPitOutLap && prevWasPitIn) {
+        // Remap frac from [pitExitFrac … 1] → [0 … N-1] so the driver emerges
+        // smoothly from the pit exit with no position jump.
+        const remapped = (frac - pitExitFrac) / Math.max(0.001, 1 - pitExitFrac);
+        ptIdx = Math.min(Math.floor(Math.max(0, remapped) * N), N - 1);
+      } else {
+        ptIdx = Math.min(Math.floor(frac * N), N - 1);
+      }
       const pt = circuitPts[ptIdx];
       const lastLapTime = lo > 0 ? driverLapTimes[driver]?.[lapNums[lo - 1]] : undefined;
       res[driver] = { sx: sx(pt.x), sy: sy(pt.y), lap: currentLapNum, effLap: lo + frac, frac, finished: false, lastLapTime, isInPit };
     }
     return res;
-  }, [currentTime, cumulativeTimelines, circuitPts, transform, driverLapTimes, driverPitInLaps, driverPitOutLaps]);
+  }, [currentTime, cumulativeTimelines, circuitPts, transform, driverLapTimes, driverPitInLaps, driverPitOutLaps, driverPitExitFracs]);
 
   const leaderboard = useMemo(() => {
     const entries = Object.entries(driverPositions);
@@ -357,9 +484,20 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
         const fB = driverInfo?.[b[0]]?.final_position ?? 99;
         return fA - fB;
       }
-      // During race: most laps / furthest through lap wins
-      const lapDiff = b[1].effLap - a[1].effLap;
+      // During race: most laps / furthest through lap wins.
+      // For finished drivers use laps_completed from official results — their
+      // effLap is only lapNums.length (count of *recorded* laps) which can be
+      // lower than actual laps if any lap times were null/invalid in the DB.
+      const lapA = a[1].finished ? (driverInfo?.[a[0]]?.laps_completed ?? a[1].effLap) : a[1].effLap;
+      const lapB = b[1].finished ? (driverInfo?.[b[0]]?.laps_completed ?? b[1].effLap) : b[1].effLap;
+      const lapDiff = lapB - lapA;
       if (Math.abs(lapDiff) < 0.001) {
+        // Both finished → use official results
+        if (a[1].finished && b[1].finished) {
+          const fA = driverInfo?.[a[0]]?.final_position ?? 99;
+          const fB = driverInfo?.[b[0]]?.final_position ?? 99;
+          return fA - fB;
+        }
         const rawA = driverInfo?.[a[0]]?.grid_position ?? 0;
         const rawB = driverInfo?.[b[0]]?.grid_position ?? 0;
         const gA = rawA > 0 ? rawA : 99;
@@ -715,26 +853,43 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
             ))}
           </div>
 
-          {/* ── Track status pop-up banner ── */}
+          {/* ── Track status pop-up — bottom-left, mirroring the legend ── */}
           {activeTrackStatus && (() => {
             const { label, sub, icon } = STATUS_LABELS[activeTrackStatus];
             const col = STATUS_COLORS[activeTrackStatus];
+            const rawMsgs = activeIntervalIndex >= 0 ? (rcMessagesByInterval[activeIntervalIndex] ?? []) : [];
+            // Deduplicate consecutive identical messages (data pipeline can insert duplicates)
+            const msgs = rawMsgs.filter((m, i) => i === 0 || m.message !== rawMsgs[i - 1].message);
             return (
-              <div className="absolute top-2 sm:top-4 left-0 right-0 flex justify-center z-20 pointer-events-none px-2">
-                <div
-                  className="flex items-center gap-1.5 sm:gap-3 px-2.5 py-1.5 sm:px-5 sm:py-2.5 rounded-lg sm:rounded-xl border"
-                  style={{
-                    background: col.replace('0.65', '0.15'),
-                    borderColor: col.replace('0.65', '0.55'),
-                    boxShadow: `0 4px 28px ${col.replace('0.65', '0.35')}`,
-                  }}
-                >
-                  <span className="text-base sm:text-xl leading-none">{icon}</span>
+              <div className="absolute bottom-3 left-3 z-20 pointer-events-none hidden sm:flex flex-col gap-1 sm:gap-1.5 px-2.5 py-2 rounded border"
+                style={{
+                  background: col.replace('0.65', '0.12'),
+                  borderColor: col.replace('0.65', '0.50'),
+                  boxShadow: `0 4px 20px ${col.replace('0.65', '0.30')}`,
+                  maxWidth: '200px',
+                }}
+              >
+                {/* Title row */}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-base leading-none">{icon}</span>
                   <div>
-                    <div className="text-white font-black text-xs sm:text-sm tracking-[0.12em] sm:tracking-[0.15em] leading-tight">{label}</div>
-                    <div className="text-white/60 text-[9px] sm:text-[10px] mt-0.5 tracking-wide hidden sm:block">{sub}</div>
+                    <div className="text-white font-black text-[10px] tracking-[0.12em] leading-tight uppercase">{label}</div>
+                    <div className="text-white/50 text-[9px] mt-0.5 tracking-wide">{sub}</div>
                   </div>
                 </div>
+                {/* Race control messages */}
+                {msgs.length > 0 && (
+                  <div
+                    className="max-h-28 overflow-y-auto space-y-0.5 border-t pt-1"
+                    style={{ borderColor: col.replace('0.65', '0.25') }}
+                  >
+                    {msgs.map((m, i) => (
+                      <p key={i} className="text-white/75 text-[9px] leading-snug font-mono">
+                        {m.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -776,25 +931,35 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
 
             {/* ── Driver dots ── */}
             {leaderboard.map(({ driver, sx: dsx, sy: dsy, position, finished, isInPit }) => {
-              if (isInPit) return null;
+              // Never return null for pitting drivers — show a pit indicator instead
+              // so the marker is always visible and there's no sudden reappearance.
               const info = driverInfo?.[driver];
               const isRetired = finished && info?.status &&
                 info.status !== 'Finished' && !info.status.startsWith('+');
               if (isRetired) return null; // Remove DNF/DNS from track
               const color = finished ? '#555' : (driverColors[driver] || '#888');
-              const isLeader = position === 1;
+              const isLeader = position === 1 && !isInPit;
               const isFeatured = featuredDrivers.includes(driver);
-              const r = isLeader ? 6.5 : isFeatured ? 5.5 : 4;
-              const showLabel = isFeatured;
+              // Pitting cars: small dashed outline dot near S/F line
+              const r = isInPit ? 3.5 : isLeader ? 6.5 : isFeatured ? 5.5 : 4;
+              const showLabel = isFeatured && !isInPit;
               return (
-                <g key={driver}>
-                  <circle cx={dsx} cy={dsy} r={r + 6} fill={color} opacity={0.12} />
+                <g key={driver} opacity={isInPit ? 0.6 : 1}>
+                  {!isInPit && <circle cx={dsx} cy={dsy} r={r + 6} fill={color} opacity={0.12} />}
                   <circle
                     cx={dsx} cy={dsy} r={r}
-                    fill={finished ? '#1a1a1a' : color}
-                    stroke={isLeader ? 'rgba(255,255,255,0.95)' : isFeatured ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.7)'}
-                    strokeWidth={isLeader ? 1.8 : 1}
+                    fill={isInPit ? '#05050f' : finished ? '#1a1a1a' : color}
+                    stroke={color}
+                    strokeWidth={isInPit ? 1 : isLeader ? 1.8 : 1}
+                    strokeDasharray={isInPit ? '2 2' : undefined}
                   />
+                  {/* Pit stop indicator: 'P' inside the dashed circle */}
+                  {isInPit && (
+                    <text x={dsx} y={dsy + 1.8} fill={color} fontSize={4} fontFamily="monospace"
+                      fontWeight="bold" textAnchor="middle">
+                      P
+                    </text>
+                  )}
                   {showLabel && !finished && (
                     <text x={dsx} y={dsy - r - 3} fill={color} fontSize={7} fontFamily="monospace" fontWeight="bold"
                       textAnchor="middle" paintOrder="stroke" stroke="#000" strokeWidth={3}>
@@ -989,12 +1154,21 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
                   style={{ left: `${pct}%` }} />
               );
             })}
-            {/* Track status ticks (SC / VSC / Yellow / Red) */}
-            {lapStatusTicks.map((tick, i) => (
-              <div key={`status-${i}`}
-                className="absolute top-0 w-px h-full pointer-events-none"
-                style={{ left: `${tick.pct.toFixed(2)}%`, background: STATUS_COLORS[tick.kind] }} />
-            ))}
+            {/* Track status BANDS (SC / VSC / Yellow / Red) — full-width highlight for each flag/SC period */}
+            {lapStatusIntervals.map((iv, i) => {
+              const startPct = maxTime > 0 ? (iv.start / maxTime) * 100 : 0;
+              const widthPct = maxTime > 0 ? ((iv.end - iv.start) / maxTime) * 100 : 0;
+              return (
+                <div key={`band-${i}`}
+                  className="absolute top-0 h-full pointer-events-none"
+                  style={{
+                    left: `${startPct.toFixed(2)}%`,
+                    width: `${Math.max(widthPct, 0.4).toFixed(2)}%`,
+                    background: STATUS_COLORS[iv.kind],
+                  }}
+                />
+              );
+            })}
             {/* Progress cursor */}
             <div className="absolute top-0 h-full w-0.5 bg-white/70 pointer-events-none"
               style={{ left: `${progressPct.toFixed(2)}%` }} />

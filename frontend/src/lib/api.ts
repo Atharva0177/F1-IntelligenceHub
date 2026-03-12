@@ -66,7 +66,19 @@ export const api = {
     return response.data;
   },
 
-  async getReplayData(raceId: number): Promise<{ laps: any[]; drivers: Record<string, any> }> {
+  async getReplayData(raceId: number): Promise<{
+    laps: any[];
+    drivers: Record<string, any>;
+    session_start: string | null;
+    race_control: Array<{
+      timestamp: string | null;
+      category: string;
+      message: string;
+      flag: string | null;
+      status: string | null;
+      scope: string | null;
+    }>;
+  }> {
     const response = await apiClient.get(`/api/races/${raceId}/replay-data`);
     return response.data;
   },

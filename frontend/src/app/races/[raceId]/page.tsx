@@ -61,6 +61,8 @@ export default function RaceDetailPage() {
   const [loadingPositions, setLoadingPositions] = useState(false);
   const [replayLaps, setReplayLaps] = useState<any[]>([]);
   const [replayDrivers, setReplayDrivers] = useState<Record<string, any>>({});
+  const [replayRaceControl, setReplayRaceControl] = useState<any[]>([]);
+  const [replaySessionStart, setReplaySessionStart] = useState<string | null>(null);
   const [drsTelemetry, setDrsTelemetry] = useState<any | null>(null);
   const [loadingReplay, setLoadingReplay] = useState(false);
   const [strategySubTab, setStrategySubTab] = useState("overview");
@@ -231,6 +233,8 @@ export default function RaceDetailPage() {
       .then(([replayData, drsData]) => {
         setReplayLaps(replayData.laps);
         setReplayDrivers(replayData.drivers);
+        setReplayRaceControl(replayData.race_control || []);
+        setReplaySessionStart(replayData.session_start || null);
         if (drsData) setDrsTelemetry(drsData);
       })
       .catch(err => console.error("Error fetching replay data:", err))
@@ -3070,6 +3074,8 @@ export default function RaceDetailPage() {
               weatherSummary={weatherSummary}
               driverInfo={replayDrivers}
               drsTelemetry={drsTelemetry}
+              raceControlMessages={replayRaceControl}
+              sessionStart={replaySessionStart}
             />
           )}
         </div>
