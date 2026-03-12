@@ -93,6 +93,17 @@ export const api = {
     return response.data;
   },
 
+  async getRacePitStops(raceId: number): Promise<Array<{
+    driver_code: string;
+    lap_number: number;
+    stop_number: number | null;
+    duration_seconds: number | null;
+    tire_fitted: string | null;
+  }>> {
+    const response = await apiClient.get(`/api/races/${raceId}/pit-stops`);
+    return response.data;
+  },
+
   async getSessionLapTimes(sessionId: number, driverCode?: string): Promise<LapTime[]> {
     const params = driverCode ? { driver_code: driverCode } : {};
     const response = await apiClient.get(`/api/sessions/${sessionId}/lap-times`, { params });

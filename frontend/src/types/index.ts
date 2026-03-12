@@ -106,6 +106,8 @@ export interface TireStrategy {
   stint_start: number;
   stint_end: number;
   avg_lap_time: number;
+  fresh_tyre?: boolean;
+  tire_age_when_started?: number;
 }
 
 export interface SectorAnalysis {

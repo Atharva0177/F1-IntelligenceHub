@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, aliased
 from sqlalchemy import func
 from database.config import get_db
-from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData, RaceControlMessage
+from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData, RaceControlMessage, PitStop
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date, datetime
@@ -417,6 +417,7 @@ async def get_race_replay_data(race_id: int, db: Session = Depends(get_db)):
             "driver_code": dc,
             "lap_time_seconds": lt.lap_time_seconds,
             "tire_compound": lt.tire_compound,
+            "tire_life": lt.tire_life,
             "is_pit_in_lap": lt.is_pit_in_lap,
             "is_pit_out_lap": lt.is_pit_out_lap,
             "track_status": lt.track_status,
@@ -468,6 +469,66 @@ async def get_race_replay_data(race_id: int, db: Session = Depends(get_db)):
         "race_control": race_control,
         "session_start": session_start_iso,
     }
+
+
+@router.get("/{race_id}/pit-stops")
+async def get_race_pit_stops(race_id: int, db: Session = Depends(get_db)):
+    """
+    Derive pit stops from lap_times using is_pit_in_lap flag.
+    tire_fitted is read from the following lap's tire_compound (the pit-out lap).
+    stop_number is computed in Python by counting pit-in laps per driver in lap order.
+    """
+    race_session = db.query(DBSession).filter(
+        DBSession.race_id == race_id,
+        DBSession.session_type == "Race",
+    ).first()
+    if not race_session:
+        return []
+
+    NextLap = aliased(LapTime)
+
+    rows = (
+        db.query(
+            Driver.code,
+            LapTime.lap_number,
+            NextLap.tire_compound,
+            NextLap.tire_life,
+        )
+        .join(Driver, LapTime.driver_id == Driver.id)
+        .outerjoin(
+            NextLap,
+            (NextLap.driver_id == LapTime.driver_id)
+            & (NextLap.session_id == LapTime.session_id)
+            & (NextLap.lap_number == LapTime.lap_number + 1),
+        )
+        .filter(
+            LapTime.session_id == race_session.id,
+            LapTime.is_pit_in_lap == True,
+        )
+        .order_by(Driver.code, LapTime.lap_number)
+        .all()
+    )
+
+    stop_counter: dict = {}
+    seen: set = set()
+    result = []
+    for driver_code, lap_number, tire_compound, tire_life in rows:
+        key = (driver_code, lap_number)
+        if key in seen:
+            continue
+        seen.add(key)
+        stop_counter[driver_code] = stop_counter.get(driver_code, 0) + 1
+        fresh_tyre = (tire_life is not None and tire_life <= 1)
+        result.append({
+            "driver_code": driver_code,
+            "lap_number": lap_number,
+            "stop_number": stop_counter[driver_code],
+            "duration_seconds": None,
+            "tire_fitted": tire_compound,
+            "tire_life": tire_life,
+            "fresh_tyre": fresh_tyre,
+        })
+    return result
 
 
 @router.get("/{race_id}/drs-telemetry")

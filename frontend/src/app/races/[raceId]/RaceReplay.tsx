@@ -8,6 +8,7 @@ interface LapRow {
   driver_code: string;
   lap_time_seconds?: number;
   tire_compound?: string;
+  tire_life?: number;
   is_pit_in_lap?: boolean;
   is_pit_out_lap?: boolean;
   track_status?: string;
@@ -144,6 +145,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
   const [currentTime, setCurrentTime] = useState(0);
   const [speedIdx, setSpeedIdx] = useState(4); // default 1x
   const [featuredDrivers, setFeaturedDrivers] = useState<string[]>([]);
+  const [showGapChart, setShowGapChart] = useState(false);
   const animRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const initializedRef = useRef(false);
 
@@ -171,6 +173,16 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
     for (const d of positionData) {
       if (!map[d.driver_code]) map[d.driver_code] = {};
       if (d.tire_compound) map[d.driver_code][d.lap_number] = d.tire_compound;
+    }
+    return map;
+  }, [positionData]);
+
+  /* ── Tire life per driver per lap ─────────────────────────────────── */
+  const driverTireLifeByLap = useMemo(() => {
+    const map: Record<string, Record<number, number | undefined>> = {};
+    for (const d of positionData) {
+      if (!map[d.driver_code]) map[d.driver_code] = {};
+      if (d.tire_life != null) map[d.driver_code][d.lap_number] = d.tire_life;
     }
     return map;
   }, [positionData]);
@@ -535,6 +547,50 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
       .join(' ');
   }, [circuitPts, transform, leaderboard]);
 
+  /* ── Gap-to-leader chart data ─────────────────────────────────────── */
+  const gapChartData = useMemo(() => {
+    if (!Object.keys(cumulativeTimelines).length || maxTime <= 0) return null;
+
+    // Find the race leader: prefer official P1 finisher, fall back to most laps
+    let leaderCode: string | null = null;
+    if (driverInfo) {
+      for (const [code, info] of Object.entries(driverInfo)) {
+        if (info.final_position === 1 && cumulativeTimelines[code]) { leaderCode = code; break; }
+      }
+    }
+    if (!leaderCode) {
+      let maxLaps = 0;
+      for (const [code, tl] of Object.entries(cumulativeTimelines)) {
+        if (tl.lapNums.length > maxLaps) { maxLaps = tl.lapNums.length; leaderCode = code; }
+      }
+    }
+    if (!leaderCode) return null;
+
+    const { lapNums: leaderLaps, cum: leaderCum } = cumulativeTimelines[leaderCode];
+
+    // For each driver, compute gap (seconds behind leader) at each of the leader's lap completions
+    const driverPoints: Record<string, Array<{ xFrac: number; gap: number }>> = {};
+    for (const [driver, { lapNums, cum }] of Object.entries(cumulativeTimelines)) {
+      const pts: Array<{ xFrac: number; gap: number }> = [];
+      for (let i = 0; i < leaderLaps.length; i++) {
+        const lap = leaderLaps[i];
+        const leaderTime = leaderCum[i + 1];
+        const dIdx = lapNums.indexOf(lap);
+        if (dIdx < 0) break; // driver DNF'd or hasn't done this lap
+        const gap = Math.max(0, cum[dIdx + 1] - leaderTime);
+        pts.push({ xFrac: leaderTime / maxTime, gap });
+      }
+      if (pts.length > 0) driverPoints[driver] = pts;
+    }
+
+    // Cap Y scale at 90s so lapped cars don't squash the visible range
+    const allGaps = Object.values(driverPoints).flatMap(pts => pts.map(p => p.gap)).filter(g => g < 300);
+    const rawMax = allGaps.length ? Math.max(...allGaps) : 60;
+    const maxGap = Math.min(90, rawMax > 0 ? rawMax * 1.05 : 60);
+
+    return { leaderCode, driverPoints, maxGap };
+  }, [cumulativeTimelines, driverInfo, maxTime]);
+
   /* ── Animation loop ───────────────────────────────────────────────── */
   useEffect(() => {
     if (animRef.current) clearInterval(animRef.current);
@@ -697,6 +753,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
             const carAhead = pos > 1 ? leaderboard[pos - 2] : null;
             const carBehind = pos <= leaderboard.length - 1 ? leaderboard[pos] : null;
             const currentTire = driverTireByLap[entry.driver]?.[entry.lap];
+            const currentTireLife = driverTireLifeByLap[entry.driver]?.[entry.lap];
             const isPitting = entry.lap > 0 &&
               positionData.some(d => d.driver_code === entry.driver && d.lap_number === entry.lap && d.is_pit_in_lap);
             const info = driverInfo?.[entry.driver];
@@ -734,10 +791,21 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
                   {currentTire && (
                     <div className="flex justify-between items-center">
                       <span className="text-gray-500">Tyre:</span>
-                      <span className="font-bold text-[10px] px-1.5 py-0.5 rounded"
-                        style={{ color: tireColor(currentTire), border: `1px solid ${tireColor(currentTire)}44` }}>
-                        {isPitting ? '🔧 PIT' : currentTire}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {!isPitting && currentTireLife === 1 && (
+                          <span className="text-[8px] font-bold px-1 py-0.5 rounded bg-emerald-900/60 text-emerald-400">NEW</span>
+                        )}
+                        <span className="font-bold text-[10px] px-1.5 py-0.5 rounded"
+                          style={{ color: tireColor(currentTire), border: `1px solid ${tireColor(currentTire)}44` }}>
+                          {isPitting ? '🔧 PIT' : currentTire}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                  {currentTireLife != null && currentTireLife > 0 && !isPitting && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Age:</span>
+                      <span className="text-gray-300 text-[10px]">{currentTireLife} lap{currentTireLife !== 1 ? 's' : ''}</span>
                     </div>
                   )}
                   {entry.lastLapTime != null && (
@@ -1136,6 +1204,19 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
           <span className="ml-auto text-[11px] text-gray-500 tabular-nums">
             {fmtTime(currentTime)} / {fmtTime(maxTime)}
           </span>
+          {/* Gap chart toggle */}
+          {gapChartData && (
+            <button
+              onClick={() => setShowGapChart(v => !v)}
+              className={`text-[10px] px-2 py-1 rounded border transition-colors shrink-0 ${
+                showGapChart
+                  ? 'border-blue-500/60 text-blue-400 bg-blue-950/40'
+                  : 'border-gray-800 text-gray-600 hover:text-gray-400 hover:border-gray-600'
+              }`}
+            >
+              Gap Chart
+            </button>
+          )}
         </div>
 
         {/* Progress bar + lap ticks */}
@@ -1189,6 +1270,116 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
           </div>
         </div>
       </div>
+
+      {/* ── GAP CHART — desktop only, collapsible ── */}
+      {showGapChart && gapChartData && (() => {
+        const GW = 800; // viewBox width
+        const GH = 118; // viewBox height
+        const GL = 30;  // left margin (Y axis labels)
+        const GR = 770; // right edge (driver name labels)
+        const GT = 14;  // top padding
+        const GB = 96;  // bottom boundary of chart area
+        const PLOT_H = GB - GT; // 82px plot height
+
+        const gridGaps = [0, 30, 60, 90].filter(g => g <= gapChartData.maxGap);
+
+        // Drivers to render: all in leaderboard order
+        const allDrivers = leaderboard.map(l => l.driver).filter(d => gapChartData.driverPoints[d]?.length);
+
+        return (
+          <div className="hidden sm:block border-t border-gray-900 bg-black">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-5 pt-1.5 pb-0.5">
+              <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Gap to Leader</span>
+              <span className="text-[9px] text-gray-700">({gapChartData.leaderCode})</span>
+              {/* Featured driver legend */}
+              <div className="flex items-center gap-3 ml-2">
+                {featuredDrivers.filter(d => gapChartData.driverPoints[d]).map(driver => (
+                  <div key={driver} className="flex items-center gap-1">
+                    <svg width="16" height="4" viewBox="0 0 16 4">
+                      <line x1="0" y1="2" x2="16" y2="2" stroke={driverColors[driver] || '#888'} strokeWidth={2} />
+                    </svg>
+                    <span className="text-[9px] font-mono" style={{ color: driverColors[driver] || '#888' }}>{driver}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <svg viewBox={`0 0 ${GW} ${GH}`} width="100%" height="120" style={{ display: 'block' }}>
+              {/* Y grid lines + labels */}
+              {gridGaps.map(g => {
+                const y = GT + (g / gapChartData.maxGap) * PLOT_H;
+                return (
+                  <g key={g}>
+                    <line x1={GL} y1={y} x2={GR} y2={y}
+                      stroke={g === 0 ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)'} strokeWidth={1} />
+                    <text x={GL - 3} y={y + 3} fill="rgba(255,255,255,0.25)" fontSize={7} textAnchor="end" fontFamily="monospace">
+                      {g === 0 ? 'Leader' : `${g}s`}
+                    </text>
+                  </g>
+                );
+              })}
+              {/* Driver lines */}
+              {allDrivers.map(driver => {
+                const pts = gapChartData.driverPoints[driver];
+                if (!pts?.length) return null;
+                const isFeatured = featuredDrivers.includes(driver);
+                const color = driverColors[driver] || '#888';
+                const pathD = pts.map((p, i) => {
+                  const x = GL + p.xFrac * (GR - GL);
+                  const y = GT + Math.min(1, p.gap / gapChartData.maxGap) * PLOT_H;
+                  return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+                }).join(' ');
+                return (
+                  <path key={driver} d={pathD} fill="none"
+                    stroke={color}
+                    strokeWidth={isFeatured ? 1.8 : 0.7}
+                    opacity={isFeatured ? 0.95 : 0.22} />
+                );
+              })}
+              {/* Cursor + featured driver gap dots + labels */}
+              {maxTime > 0 && (() => {
+                const curX = GL + (currentTime / maxTime) * (GR - GL);
+                const clampedX = Math.min(GR, Math.max(GL, curX));
+                return (
+                  <>
+                    <line x1={clampedX} y1={0} x2={clampedX} y2={GH}
+                      stroke="rgba(255,255,255,0.22)" strokeWidth={1} />
+                    {featuredDrivers.filter(d => gapChartData.driverPoints[d]?.length).map(driver => {
+                      const pts = gapChartData.driverPoints[driver]!;
+                      const frac = currentTime / maxTime;
+                      // Binary search for nearest point
+                      let lo = 0, hi = pts.length - 1;
+                      while (lo < hi) {
+                        const mid = (lo + hi + 1) >> 1;
+                        if (pts[mid].xFrac <= frac) lo = mid; else hi = mid - 1;
+                      }
+                      const nearest = pts[lo];
+                      const nx = GL + nearest.xFrac * (GR - GL);
+                      const ny = GT + Math.min(1, nearest.gap / gapChartData.maxGap) * PLOT_H;
+                      const color = driverColors[driver] || '#888';
+                      const labelX = Math.min(GR - 28, Math.max(GL + 2, clampedX + 3));
+                      return (
+                        <g key={driver}>
+                          <circle cx={nx} cy={ny} r={3} fill={color} />
+                          <text x={labelX} y={Math.max(GT + 8, ny - 2)} fill={color}
+                            fontSize={7} fontFamily="monospace" fontWeight="bold">
+                            {nearest.gap.toFixed(1)}s
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+              {/* Bottom axis label */}
+              <text x={GL} y={GH - 2} fill="rgba(255,255,255,0.2)" fontSize={7} fontFamily="monospace">Lap 1</text>
+              <text x={GR} y={GH - 2} fill="rgba(255,255,255,0.2)" fontSize={7} fontFamily="monospace" textAnchor="end">
+                Lap {totalLaps}
+              </text>
+            </svg>
+          </div>
+        );
+      })()}
 
       {/* ── MOBILE-ONLY: Weather + Featured Driver strip (scrollable) ── */}
       <div className="sm:hidden border-t border-gray-900 overflow-x-auto bg-black/60">

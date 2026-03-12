@@ -94,12 +94,13 @@ async def get_tire_strategies(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Get tire usage data
+    # Get tire usage data including tire_life for fresh/used detection
     lap_times = db.query(
         Driver.code,
         LapTime.tire_compound,
         LapTime.lap_number,
-        LapTime.lap_time_seconds
+        LapTime.lap_time_seconds,
+        LapTime.tire_life,
     ).join(Driver).filter(
         LapTime.session_id == session_id,
         LapTime.tire_compound.isnot(None)
@@ -107,7 +108,7 @@ async def get_tire_strategies(
 
     # Detect actual stints: a new stint begins whenever the compound changes
     stints_by_driver: dict = {}  # driver_code -> list of stint dicts
-    for code, compound, lap_num, lap_time in lap_times:
+    for code, compound, lap_num, lap_time, tire_life in lap_times:
         if code not in stints_by_driver:
             stints_by_driver[code] = []
         driver_stints = stints_by_driver[code]
@@ -117,6 +118,7 @@ async def get_tire_strategies(
                 "compound": compound,
                 "laps": [],
                 "times": [],
+                "first_tire_life": tire_life,  # tire_life on the first lap of the stint
             })
         driver_stints[-1]["laps"].append(lap_num)
         if lap_time is not None:
@@ -128,6 +130,11 @@ async def get_tire_strategies(
         for i, stint in enumerate(stints):
             if stint["laps"]:
                 times = stint["times"]
+                first_life = stint.get("first_tire_life")
+                # A tyre is fresh/new when its life starts at 1 (or 0)
+                fresh_tyre = (first_life is not None and first_life <= 1)
+                # How many laps were already on the tyre when the stint started
+                tire_age_when_started = max(0, (first_life or 1) - 1)
                 result.append({
                     "driver_code": code,
                     "compound": stint["compound"],
@@ -137,6 +144,8 @@ async def get_tire_strategies(
                     "lap_count": len(stint["laps"]),
                     "avg_lap_time": sum(times) / len(times) if times else 0.0,
                     "fastest_lap_time": min(times) if times else 0.0,
+                    "fresh_tyre": fresh_tyre,
+                    "tire_age_when_started": tire_age_when_started,
                 })
 
     return result
