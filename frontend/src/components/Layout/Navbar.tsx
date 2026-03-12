@@ -5,12 +5,13 @@ import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 const navLinks = [
-  { href: '/',          label: 'Dashboard' },
-  { href: '/races',     label: 'Races' },
-  { href: '/drivers',   label: 'Drivers' },
-  { href: '/teams',     label: 'Teams' },
-  { href: '/standings', label: 'Standings' },
-  { href: '/analytics', label: 'Analytics' },
+  { href: '/',             label: 'Dashboard' },
+  { href: '/races',        label: 'Races' },
+  { href: '/drivers',      label: 'Drivers' },
+  { href: '/teams',        label: 'Teams' },
+  { href: '/standings',    label: 'Standings' },
+  { href: '/analytics',    label: 'Analytics' },
+  { href: '/predictions',  label: 'Predictions' },
 ];
 
 const Navbar = () => {

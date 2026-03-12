@@ -25,7 +25,7 @@ app.add_middleware(
 # Import route modules
 from api.routes import (
     races, drivers, telemetry, analytics, weather, race_control,
-    session_status, sessions, circuits, standings, constructors, h2h
+    session_status, sessions, circuits, standings, constructors, h2h, predictions
 )
 
 # Register routers
@@ -41,6 +41,7 @@ app.include_router(weather.router)  # Already has prefix in router definition
 app.include_router(race_control.router)  # Already has prefix in router definition
 app.include_router(session_status.router)  # Already has prefix in router definition
 app.include_router(sessions.router, prefix="/api")  # sessions.py has /sessions prefix
+app.include_router(predictions.router, prefix="/api/predictions", tags=["predictions"])
 
 
 @app.on_event("startup")

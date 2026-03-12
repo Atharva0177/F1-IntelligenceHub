@@ -154,6 +154,24 @@ if (-not (Test-Path $backupFile)) {
         docker compose start backend | Out-Null
         Write-Host "        OK" -ForegroundColor Green
 
+        # ── [g] Migrations for tables added after the backup was taken ─────────
+        Write-Host "    [g] Applying post-backup migrations..." -ForegroundColor Cyan
+        $migrationSql = @"
+CREATE TABLE IF NOT EXISTS race_weather (
+    id             SERIAL PRIMARY KEY,
+    race_id        INTEGER NOT NULL UNIQUE REFERENCES races(id),
+    air_temp_avg   FLOAT,
+    track_temp_avg FLOAT,
+    humidity_avg   FLOAT,
+    rainfall       BOOLEAN DEFAULT FALSE,
+    wind_speed_avg FLOAT,
+    fetched_at     TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_race_weather_race ON race_weather(race_id);
+"@
+        $migrationSql | docker exec -i f1_postgres psql -U f1user -d f1_intelligence_hub -q 2>$null | Out-Null
+        Write-Host "        OK" -ForegroundColor Green
+
         # ── Row-count verification (real COUNT(*), not stale autovacuum stats) ─
         Write-Host ""
         Write-Host "    Row counts:" -ForegroundColor Cyan
@@ -174,6 +192,7 @@ SELECT table_name, cnt FROM (
   UNION ALL SELECT 'position_data',         count(*) FROM position_data
   UNION ALL SELECT 'race_control_messages', count(*) FROM race_control_messages
   UNION ALL SELECT 'session_status',        count(*) FROM session_status
+  UNION ALL SELECT 'race_weather',           count(*) FROM race_weather
 ) t ORDER BY cnt DESC;
 "@
         $verifySql | docker exec -i f1_postgres psql -U f1user -d f1_intelligence_hub `
@@ -190,7 +209,9 @@ Write-Host "  Backend  : http://localhost:8000" -ForegroundColor Cyan
 Write-Host "  API Docs : http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Useful commands:" -ForegroundColor DarkGray
-Write-Host "    Load data  : docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor DarkGray
-Write-Host "    Back up DB : .\scripts\backup.ps1" -ForegroundColor DarkGray
-Write-Host "    Restore DB : .\scripts\restore.ps1" -ForegroundColor DarkGray
+  Write-Host "    Load data      : docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor DarkGray
+  Write-Host "    Back up DB     : .\scripts\backup.ps1" -ForegroundColor DarkGray
+  Write-Host "    Restore DB     : .\scripts\restore.ps1" -ForegroundColor DarkGray
+  Write-Host "    Race weather   : python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
+  Write-Host "      (downloads FastF1 race weather data; improves ML model rainfall feature)" -ForegroundColor DarkGray
 Write-Host ""

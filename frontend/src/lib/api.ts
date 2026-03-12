@@ -199,6 +199,20 @@ export const api = {
     return response.data;
   },
 
+  // Predictions
+  async getPredictableRaces(): Promise<any[]> {
+    const response = await apiClient.get('/api/predictions/races');
+    return response.data;
+  },
+
+  async predictRace(raceId: number, modelType = 'gb'): Promise<any> {
+    const response = await apiClient.get(`/api/predictions/race/${raceId}`, {
+      params: { model_type: modelType },
+      timeout: 60000, // model training can take up to ~30s on first run
+    });
+    return response.data;
+  },
+
   // Circuit Guide
   async getCircuitGuide(circuitId: number): Promise<CircuitGuide> {
     const response = await apiClient.get(`/api/circuits/${circuitId}`);
