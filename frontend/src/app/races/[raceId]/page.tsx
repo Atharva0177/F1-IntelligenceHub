@@ -68,8 +68,6 @@ export default function RaceDetailPage() {
   const [strategySubTab, setStrategySubTab] = useState("overview");
   const [strategyData, setStrategyData] = useState<any[]>([]);
   const [loadingStrategy, setLoadingStrategy] = useState(false);
-  const [pitStopData, setPitStopData] = useState<any[]>([]);
-  const [loadingPitStops, setLoadingPitStops] = useState(false);
   const [lapTimesData, setLapTimesData] = useState<LapTime[]>([]);
   const [loadingLapTimes, setLoadingLapTimes] = useState(false);
   const [selectedDriversForLaps, setSelectedDriversForLaps] = useState<
@@ -261,17 +259,6 @@ export default function RaceDetailPage() {
 
     fetchStrategy();
   }, [activeTab, selectedSessionId]);
-
-  // Fetch pit stop data when Strategy > Pit Stops sub-tab is active
-  useEffect(() => {
-    if (activeTab !== "strategy" || strategySubTab !== "pitstops") return;
-    if (loadingPitStops || pitStopData.length > 0) return;
-    setLoadingPitStops(true);
-    api.getRacePitStops(raceId)
-      .then(data => setPitStopData(data))
-      .catch(() => {})
-      .finally(() => setLoadingPitStops(false));
-  }, [activeTab, strategySubTab, raceId]);
 
   // Fetch lap times when Lap Times tab is active
   useEffect(() => {
@@ -1589,16 +1576,6 @@ export default function RaceDetailPage() {
               >
                 📋 Stint Detail
               </button>
-              <button
-                onClick={() => setStrategySubTab("pitstops")}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
-                  strategySubTab === "pitstops"
-                    ? "bg-carbon-700 text-white"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                🔧 Pit Stops
-              </button>
             </div>
 
             {/* Overview - Tire Strategy Visualization */}
@@ -1823,6 +1800,59 @@ export default function RaceDetailPage() {
                             <span className="absolute right-0 top-1 text-[9px] text-gray-600 font-mono">
                               Lap {totalLaps}
                             </span>
+                          </div>
+                        </div>
+
+                        {/* Tyre Stint Analysis */}
+                        <div className="mt-6 pt-5 border-t border-zinc-800">
+                          <div className="flex items-center gap-4 mb-3">
+                            <h3 className="text-sm font-bold text-white">Tyre Stint Analysis</h3>
+                            <p className="text-[10px] text-gray-500">
+                              <span className="inline-flex items-center gap-1 mr-3">
+                                <span className="text-emerald-400 font-bold">NEW</span> = fresh/unused tyre
+                              </span>
+                              <span className="inline-flex items-center gap-1">
+                                <span className="text-amber-400 font-bold">+NL</span> = pre-used by N laps
+                              </span>
+                            </p>
+                          </div>
+                          <div className="space-y-1.5">
+                            {race?.results.slice(0, 20).map((driver) => {
+                              const tStints = strategyData
+                                .filter((s: any) => s.driver_code === driver.driver_code)
+                                .sort((a: any, b: any) => a.stint_start - b.stint_start);
+                              if (tStints.length === 0) return null;
+                              return (
+                                <div key={driver.driver_code} className="flex items-start gap-2">
+                                  <div className="w-8 flex-shrink-0 flex items-center justify-end pt-1.5">
+                                    <span className="text-xs font-bold text-white font-mono">{driver.driver_code}</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5 flex-1">
+                                    {tStints.map((stint: any, i: number) => {
+                                      const tcs = getCS(stint.compound || '');
+                                      const lapCount = stint.stint_end - stint.stint_start + 1;
+                                      const isFresh: boolean = stint.fresh_tyre == null ? true : !!stint.fresh_tyre;
+                                      const age: number = stint.tire_age_when_started ?? 0;
+                                      return (
+                                        <div key={i}
+                                          className="flex items-center gap-1.5 bg-zinc-900/80 rounded-md px-2 py-1.5 border border-zinc-800"
+                                          title={`${stint.compound} · Laps ${stint.stint_start}–${stint.stint_end} · ${lapCount} laps${isFresh ? ' · New tyre' : ` · Used (+${age} laps old)`}`}>
+                                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: tcs.bg }} />
+                                          <span className="text-[10px] font-bold" style={{ color: tcs.bg }}>{stint.compound}</span>
+                                          <span className="text-[9px] text-gray-500 font-mono">L{stint.stint_start}–{stint.stint_end}</span>
+                                          <span className="text-[9px] text-gray-400 font-mono">{lapCount}L</span>
+                                          {isFresh ? (
+                                            <span className="text-[8px] font-bold text-emerald-400 bg-emerald-900/40 border border-emerald-800/60 px-1 py-0.5 rounded">NEW</span>
+                                          ) : (
+                                            <span className="text-[8px] text-amber-400 bg-amber-900/30 border border-amber-800/50 px-1 py-0.5 rounded">+{age}L</span>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </div>
@@ -2077,205 +2107,6 @@ export default function RaceDetailPage() {
                 </div>
               </div>
             )}
-
-            {/* Pit Stops Sub-tab */}
-            {strategySubTab === "pitstops" && (() => {
-              const totalRaceLaps = Math.max(
-                ...strategyData.map((s: any) => s.stint_end),
-                ...((race?.results ?? []).map((r: any) => r.laps_completed || 0)),
-                1,
-              );
-              const tickStep = totalRaceLaps > 40 ? 10 : 5;
-              const ticks = Array.from({ length: Math.floor(totalRaceLaps / tickStep) }, (_, i) => (i + 1) * tickStep);
-              const CC: Record<string, { bg: string; text: string }> = {
-                SOFT: { bg: '#ef4444', text: '#111' }, MEDIUM: { bg: '#eab308', text: '#111' },
-                HARD: { bg: '#d1d5db', text: '#111' }, INTERMEDIATE: { bg: '#22c55e', text: '#111' },
-                WET: { bg: '#3b82f6', text: '#fff' },
-              };
-              const getCC = (c: string) => CC[c?.toUpperCase()] ?? { bg: '#6b7280', text: '#fff' };
-              const hasDurations = pitStopData.some((s: any) => s.duration_seconds != null && s.duration_seconds > 0);
-              const validDurs = pitStopData.filter((s: any) => s.duration_seconds > 0).map((s: any) => s.duration_seconds as number);
-              const minDur = validDurs.length ? Math.min(...validDurs) : 0;
-              const maxDur = validDurs.length ? Math.max(...validDurs) : 30;
-              const avgDur = validDurs.length ? validDurs.reduce((a, b) => a + b, 0) / validDurs.length : 0;
-              const teamDurations: Record<string, number[]> = {};
-              for (const stop of pitStopData) {
-                if (!stop.duration_seconds) continue;
-                const team = race?.results.find((r: any) => r.driver_code === stop.driver_code)?.team_name || 'Unknown';
-                if (!teamDurations[team]) teamDurations[team] = [];
-                teamDurations[team].push(stop.duration_seconds);
-              }
-              return (
-                <div className="p-6 space-y-6">
-                  {loadingPitStops ? (
-                    <div className="text-center py-8 text-gray-400">Loading pit stop data…</div>
-                  ) : pitStopData.length === 0 ? (
-                    <div className="text-center py-8 text-gray-400">No pit stop data available for this race.</div>
-                  ) : (
-                    <>
-                      {/* Summary stats */}
-                      {hasDurations && (
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="bg-carbon-900/60 rounded-lg p-3 text-center">
-                            <div className="text-2xl font-black text-white">{pitStopData.length}</div>
-                            <div className="text-xs text-gray-500 mt-0.5">Total Stops</div>
-                          </div>
-                          <div className="bg-carbon-900/60 rounded-lg p-3 text-center">
-                            <div className="text-2xl font-black text-emerald-400">{minDur.toFixed(1)}s</div>
-                            <div className="text-xs text-gray-500 mt-0.5">Fastest Stop</div>
-                          </div>
-                          <div className="bg-carbon-900/60 rounded-lg p-3 text-center">
-                            <div className="text-2xl font-black text-yellow-400">{avgDur.toFixed(1)}s</div>
-                            <div className="text-xs text-gray-500 mt-0.5">Average Stop</div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Pit window chart */}
-                      <div>
-                        <h3 className="text-sm font-bold text-white mb-3">Pit Window</h3>
-                        {/* Lap ruler */}
-                        <div className="flex items-end gap-2 mb-2 select-none">
-                          <div className="w-8 flex-shrink-0" />
-                          <div className="flex-1 relative h-5">
-                            {ticks.map((lap) => (
-                              <div key={lap} className="absolute bottom-0 flex flex-col items-center gap-0.5"
-                                style={{ left: `${((lap - 1) / totalRaceLaps) * 100}%`, transform: 'translateX(-50%)' }}>
-                                <span className="text-[9px] text-gray-500 font-mono">{lap}</span>
-                                <div className="w-px h-1.5 bg-zinc-600" />
-                              </div>
-                            ))}
-                            <div className="absolute bottom-0 flex flex-col items-end gap-0.5" style={{ right: 0 }}>
-                              <span className="text-[9px] text-gray-500 font-mono">{totalRaceLaps}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          {(race?.results ?? []).slice(0, 20).map((driver: any) => {
-                            const stops = pitStopData.filter((s: any) => s.driver_code === driver.driver_code);
-                            return (
-                              <div key={driver.driver_code} className="flex items-center gap-2">
-                                <div className="w-8 flex-shrink-0 flex items-center justify-end">
-                                  <span className="text-xs font-bold text-white font-mono">{driver.driver_code}</span>
-                                </div>
-                                <div className="flex-1 h-8 relative">
-                                  <div className="absolute inset-0 bg-zinc-900 rounded" />
-                                  {stops.map((stop: any, i: number) => {
-                                    const leftPct = ((stop.lap_number - 1) / totalRaceLaps) * 100;
-                                    const cc = getCC(stop.tire_fitted || '');
-                                    const durNorm = hasDurations && stop.duration_seconds
-                                      ? (stop.duration_seconds - minDur) / Math.max(1, maxDur - minDur)
-                                      : 0.5;
-                                    const diameter = Math.round(10 + durNorm * 10);
-                                    return (
-                                      <div key={i}
-                                        title={`Lap ${stop.lap_number}${stop.tire_fitted ? ` · ${stop.tire_fitted}` : ''}${stop.fresh_tyre ? ' · New tyre' : stop.tire_life != null ? ` · Used (+${Math.max(0, stop.tire_life - 1)}L old)` : ''}`}
-                                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 rounded-full flex items-center justify-center cursor-default"
-                                        style={{ left: `${leftPct}%`, width: diameter, height: diameter, background: cc.bg, border: '1.5px solid rgba(255,255,255,0.2)', zIndex: 2 }}>
-                                        <span className="text-[7px] font-black leading-none" style={{ color: cc.text }}>
-                                          {stop.tire_fitted ? stop.tire_fitted[0] : '?'}
-                                        </span>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div className="flex items-center gap-2 mt-2 select-none">
-                          <div className="w-8 flex-shrink-0" />
-                          <div className="flex-1 relative">
-                            <div className="h-px bg-zinc-700 w-full" />
-                            <span className="absolute left-0 top-1 text-[9px] text-gray-600 font-mono">Lap 1</span>
-                            <span className="absolute right-0 top-1 text-[9px] text-gray-600 font-mono">Lap {totalRaceLaps}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Tyre Stint Analysis */}
-                      <div>
-                        <h3 className="text-sm font-bold text-white mb-1">Tyre Stint Analysis</h3>
-                        <p className="text-[10px] text-gray-500 mb-3">
-                          <span className="inline-flex items-center gap-1 mr-3">
-                            <span className="text-emerald-400 font-bold">NEW</span> = fresh/unused tyre
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <span className="text-amber-400 font-bold">+NL</span> = pre-used by N laps
-                          </span>
-                        </p>
-                        <div className="space-y-2">
-                          {(race?.results ?? []).slice(0, 20).map((driver: any) => {
-                            const stints = strategyData
-                              .filter((s: any) => s.driver_code === driver.driver_code)
-                              .sort((a: any, b: any) => a.stint_start - b.stint_start);
-                            if (stints.length === 0) return null;
-                            return (
-                              <div key={driver.driver_code} className="flex items-start gap-2">
-                                <div className="w-8 flex-shrink-0 flex items-center justify-end pt-1.5">
-                                  <span className="text-xs font-bold text-white font-mono">{driver.driver_code}</span>
-                                </div>
-                                <div className="flex flex-wrap gap-1.5 flex-1">
-                                  {stints.map((stint: any, i: number) => {
-                                    const cc = getCC(stint.compound || '');
-                                    const lapCount = stint.stint_end - stint.stint_start + 1;
-                                    const isFresh: boolean = stint.fresh_tyre == null ? true : !!stint.fresh_tyre;
-                                    const age: number = stint.tire_age_when_started ?? 0;
-                                    return (
-                                      <div key={i}
-                                        className="flex items-center gap-1.5 bg-zinc-900/80 rounded-md px-2 py-1.5 border border-zinc-800"
-                                        title={`${stint.compound} · Laps ${stint.stint_start}–${stint.stint_end} · ${lapCount} laps on tyre${isFresh ? ' · New tyre' : ` · Used (+${age} laps old)`}`}>
-                                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: cc.bg }} />
-                                        <span className="text-[10px] font-bold" style={{ color: cc.bg }}>{stint.compound}</span>
-                                        <span className="text-[9px] text-gray-500 font-mono">L{stint.stint_start}–{stint.stint_end}</span>
-                                        <span className="text-[9px] text-gray-400 font-mono">{lapCount}L</span>
-                                        {isFresh ? (
-                                          <span className="text-[8px] font-bold text-emerald-400 bg-emerald-900/40 border border-emerald-800/60 px-1 py-0.5 rounded">NEW</span>
-                                        ) : (
-                                          <span className="text-[8px] text-amber-400 bg-amber-900/30 border border-amber-800/50 px-1 py-0.5 rounded">+{age}L</span>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Team average durations */}
-                      {hasDurations && Object.keys(teamDurations).length > 0 && (
-                        <div>
-                          <h3 className="text-sm font-bold text-white mb-3">Team Average Pit Stop Duration</h3>
-                          <div className="space-y-2">
-                            {Object.entries(teamDurations)
-                              .map(([team, durs]) => ({ team, avg: durs.reduce((a, b) => a + b, 0) / durs.length, count: durs.length }))
-                              .sort((a, b) => a.avg - b.avg)
-                              .map(({ team, avg, count }) => {
-                                const pct = (avg / maxDur) * 100;
-                                const teamDriverCode = race?.results.find((r: any) => r.team_name === team)?.driver_code || '';
-                                const barColor = (driverColors[teamDriverCode] || '#6b7280') + 'cc';
-                                return (
-                                  <div key={team} className="flex items-center gap-3">
-                                    <div className="w-32 text-xs text-gray-400 truncate shrink-0">{team}</div>
-                                    <div className="flex-1 h-4 bg-carbon-900/60 rounded overflow-hidden">
-                                      <div className="h-full rounded transition-all" style={{ width: `${pct}%`, background: barColor }} />
-                                    </div>
-                                    <div className="text-xs font-mono font-bold text-white w-16 text-right shrink-0">
-                                      {avg.toFixed(1)}s <span className="text-gray-600 font-normal">×{count}</span>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })()}
           </div>
         </div>
       )}
