@@ -71,6 +71,10 @@ if (-not (Test-Path $backupFile)) {
     Write-Host ""
     Write-Host "  Load data with (runs entirely inside Docker):" -ForegroundColor Yellow
     Write-Host "  docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Optional enrichment:" -ForegroundColor DarkGray
+    Write-Host "    Race weather : docker compose run --rm loader python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
+    Write-Host "    Backfill Q   : docker compose run --rm loader python scripts/backfill_qualifying.py" -ForegroundColor DarkGray
 } else {
     $dumpSizeMB = [math]::Round((Get-Item $backupFile).Length / 1MB, 1)
     Write-Host "  [6/6] Found $backupFile ($dumpSizeMB MB)" -ForegroundColor Cyan
@@ -154,9 +158,66 @@ if (-not (Test-Path $backupFile)) {
         docker compose start backend | Out-Null
         Write-Host "        OK" -ForegroundColor Green
 
-        # ── [g] Migrations for tables added after the backup was taken ─────────
-        Write-Host "    [g] Applying post-backup migrations..." -ForegroundColor Cyan
+        # ── [g] Migrations for tables added after the initial schema ────────────
+        #        (all use IF NOT EXISTS — safe to re-run on any DB state)
+        Write-Host "    [g] Applying migrations..." -ForegroundColor Cyan
         $migrationSql = @"
+-- Tables from add_comprehensive_data.sql migration
+CREATE TABLE IF NOT EXISTS weather_data (
+    id            SERIAL PRIMARY KEY,
+    session_id    INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    timestamp     TIMESTAMP NOT NULL,
+    air_temp      FLOAT,
+    track_temp    FLOAT,
+    humidity      FLOAT,
+    pressure      FLOAT,
+    wind_speed    FLOAT,
+    wind_direction INTEGER,
+    rainfall      BOOLEAN DEFAULT FALSE
+);
+CREATE INDEX IF NOT EXISTS idx_weather_session   ON weather_data(session_id);
+CREATE INDEX IF NOT EXISTS idx_weather_timestamp ON weather_data(timestamp);
+
+CREATE TABLE IF NOT EXISTS session_status (
+    id         SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    timestamp  TIMESTAMP NOT NULL,
+    status     VARCHAR(100),
+    message    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_session_status_session   ON session_status(session_id);
+CREATE INDEX IF NOT EXISTS idx_session_status_timestamp ON session_status(timestamp);
+
+CREATE TABLE IF NOT EXISTS race_control_messages (
+    id          SERIAL PRIMARY KEY,
+    session_id  INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    timestamp   TIMESTAMP NOT NULL,
+    lap_number  INTEGER,
+    category    VARCHAR(100),
+    message     TEXT NOT NULL,
+    flag        VARCHAR(50),
+    scope       VARCHAR(50),
+    driver_code VARCHAR(3),
+    sector      INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_race_control_session   ON race_control_messages(session_id);
+CREATE INDEX IF NOT EXISTS idx_race_control_timestamp ON race_control_messages(timestamp);
+CREATE INDEX IF NOT EXISTS idx_race_control_flag      ON race_control_messages(flag);
+
+-- Position data table (lap-by-lap car coordinates)
+CREATE TABLE IF NOT EXISTS position_data (
+    id         SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    driver_id  INTEGER NOT NULL REFERENCES drivers(id)  ON DELETE CASCADE,
+    timestamp  TIMESTAMP NOT NULL,
+    x          FLOAT,
+    y          FLOAT,
+    z          FLOAT
+);
+CREATE INDEX IF NOT EXISTS idx_position_session ON position_data(session_id);
+CREATE INDEX IF NOT EXISTS idx_position_driver  ON position_data(driver_id);
+
+-- Race-level aggregated weather (used by ML predictions)
 CREATE TABLE IF NOT EXISTS race_weather (
     id             SERIAL PRIMARY KEY,
     race_id        INTEGER NOT NULL UNIQUE REFERENCES races(id),
@@ -192,7 +253,7 @@ SELECT table_name, cnt FROM (
   UNION ALL SELECT 'position_data',         count(*) FROM position_data
   UNION ALL SELECT 'race_control_messages', count(*) FROM race_control_messages
   UNION ALL SELECT 'session_status',        count(*) FROM session_status
-  UNION ALL SELECT 'race_weather',           count(*) FROM race_weather
+  UNION ALL SELECT 'race_weather',          count(*) FROM race_weather
 ) t ORDER BY cnt DESC;
 "@
         $verifySql | docker exec -i f1_postgres psql -U f1user -d f1_intelligence_hub `
@@ -209,9 +270,12 @@ Write-Host "  Backend  : http://localhost:8000" -ForegroundColor Cyan
 Write-Host "  API Docs : http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Useful commands:" -ForegroundColor DarkGray
-  Write-Host "    Load data      : docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor DarkGray
-  Write-Host "    Back up DB     : .\scripts\backup.ps1" -ForegroundColor DarkGray
-  Write-Host "    Restore DB     : .\scripts\restore.ps1" -ForegroundColor DarkGray
-  Write-Host "    Race weather   : python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
-  Write-Host "      (downloads FastF1 race weather data; improves ML model rainfall feature)" -ForegroundColor DarkGray
+  Write-Host "    Load data (2026) : docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor DarkGray
+  Write-Host "    Back up DB       : .\scripts\backup.ps1" -ForegroundColor DarkGray
+  Write-Host "    Restore DB       : .\scripts\restore.ps1" -ForegroundColor DarkGray
+  Write-Host "    Race weather     : docker compose run --rm loader python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
+  Write-Host "      (downloads FastF1 race weather data; improves ML predictions)" -ForegroundColor DarkGray
+  Write-Host "    Backfill quali   : docker compose run --rm loader python scripts/backfill_qualifying.py" -ForegroundColor DarkGray
+  Write-Host "    Circuit coords   : docker compose run --rm loader python scripts/generate_circuit_coords.py" -ForegroundColor DarkGray
+  Write-Host "    Circuit SVGs     : docker compose run --rm loader python scripts/generate_circuit_svgs.py" -ForegroundColor DarkGray
 Write-Host ""
