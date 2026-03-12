@@ -929,7 +929,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
             // Deduplicate consecutive identical messages (data pipeline can insert duplicates)
             const msgs = rawMsgs.filter((m, i) => i === 0 || m.message !== rawMsgs[i - 1].message);
             return (
-              <div className="absolute bottom-3 left-3 z-20 pointer-events-none hidden sm:flex flex-col gap-1 sm:gap-1.5 px-2.5 py-2 rounded border"
+              <div className="absolute bottom-3 left-3 z-20 pointer-events-none flex flex-col gap-1 sm:gap-1.5 px-2.5 py-2 rounded border"
                 style={{
                   background: col.replace('0.65', '0.12'),
                   borderColor: col.replace('0.65', '0.50'),
@@ -1287,7 +1287,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
         const allDrivers = leaderboard.map(l => l.driver).filter(d => gapChartData.driverPoints[d]?.length);
 
         return (
-          <div className="hidden sm:block border-t border-gray-900 bg-black">
+          <div className="block border-t border-gray-900 bg-black">
             {/* Header */}
             <div className="flex items-center gap-3 px-5 pt-1.5 pb-0.5">
               <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Gap to Leader</span>
@@ -1384,17 +1384,6 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
       {/* ── MOBILE-ONLY: Weather + Featured Driver strip (scrollable) ── */}
       <div className="sm:hidden border-t border-gray-900 overflow-x-auto bg-black/60">
         <div className="flex gap-2 p-2.5" style={{ minWidth: 'max-content' }}>
-          {/* Weather pill */}
-          {weatherSummary && (
-            <div className="shrink-0 rounded bg-black/80 border border-gray-800 px-2.5 py-2 text-[10px] text-gray-400 space-y-0.5" style={{ minWidth: 100 }}>
-              <div className="text-white text-[9px] font-bold uppercase tracking-widest mb-1.5">Weather</div>
-              {weatherSummary.avg_track_temp != null && <div>🌡 Track: <span className="text-gray-200">{weatherSummary.avg_track_temp}°C</span></div>}
-              {weatherSummary.avg_air_temp != null && <div>🌡 Air: <span className="text-gray-200">{weatherSummary.avg_air_temp}°C</span></div>}
-              {weatherSummary.avg_humidity != null && <div>💧 Hum: <span className="text-gray-200">{weatherSummary.avg_humidity}%</span></div>}
-              {weatherSummary.avg_wind_speed != null && <div>💨 Wind: <span className="text-gray-200">{weatherSummary.avg_wind_speed} m/s</span></div>}
-              <div>🌧 <span className={weatherSummary.rainfall_occurred ? 'text-blue-400' : 'text-gray-200'}>{weatherSummary.rainfall_occurred ? 'WET' : 'DRY'}</span></div>
-            </div>
-          )}
           {/* Featured driver mini-cards */}
           {featuredEntries.map(entry => {
             const color = driverColors[entry.driver] || '#888';
