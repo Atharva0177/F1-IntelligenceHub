@@ -1,22 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '@/lib/api';
-
-// ─── Driver colour map (matches race page) ───────────────────────────────────
-const DRIVER_COLORS: Record<string, string> = {
-  HAM: '#00D2BE', RUS: '#00B4D8', BOT: '#00D2BE',
-  VER: '#3671C6', PER: '#5590D9',
-  LEC: '#E8002D', SAI: '#FF4444',
-  NOR: '#FF8000', PIA: '#F5A623', RIC: '#FF8700',
-  ALO: '#0090FF', STR: '#358C75',
-  OCO: '#FF87BC', GAS: '#4895EF',
-  TSU: '#6692FF', LAW: '#5588DD', HAD: '#3366BB',
-  ALB: '#005AFF', COL: '#00BFFF', SAR: '#64C4FF',
-  MAG: '#B6503A', BEA: '#CC3333', HUL: '#FFF500',
-  ZHO: '#D4006C', ANT: '#50C8F0', DOO: '#3399FF',
-};
-const driverColor = (code: string) => DRIVER_COLORS[code] ?? '#888';
+import { buildDriverStyles } from '@/lib/teamStyles';
 
 // ─── Medal colours ────────────────────────────────────────────────────────────
 const MEDAL = ['#FFD700', '#C0C0C0', '#CD7F32'];
@@ -54,10 +40,6 @@ const MODELS = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-function pct(v: number) {
-  return `${(v * 100).toFixed(1)}%`;
-}
-
 function flag(country: string) {
   const map: Record<string, string> = {
     'Australia': '🇦🇺', 'Bahrain': '🇧🇭', 'Saudi Arabia': '🇸🇦',
@@ -78,18 +60,20 @@ function flag(country: string) {
 function PodiumCard({
   rank,
   driver,
+  style,
 }: {
   rank: number;
   driver: any;
+  style?: { color: string };
 }) {
-  const col = driverColor(driver.driver_code);
+  const col = style?.color ?? '#888';
   const medal = MEDAL[rank - 1];
-  const winPct = Math.round(driver.win_probability * 100);
-  const podPct = Math.round(driver.podium_probability * 100);
+  const gridDelta =
+    driver.grid_position != null
+      ? driver.grid_position - driver.predicted_position
+      : null;
   const isCorrect =
     driver.actual_position != null && driver.actual_position === rank;
-  const isWrong =
-    driver.actual_position != null && driver.actual_position !== rank;
 
   return (
     <div
@@ -118,30 +102,44 @@ function PodiumCard({
         {driver.driver_code}
       </div>
 
-      {/* Win probability */}
+      {/* Predicted finish */}
       <div className="text-center mt-1">
-        <div className="text-2xl font-black text-white">{pct(driver.win_probability)}</div>
-        <div className="text-[10px] text-gray-500 uppercase tracking-widest">Win chance</div>
+        <div className="text-3xl font-black text-white">P{driver.predicted_position}</div>
+        <div className="text-[10px] text-gray-500 uppercase tracking-widest">Projected finish</div>
       </div>
 
-      {/* Podium probability bar */}
-      <div className="w-full mt-1">
-        <div className="flex justify-between text-[10px] text-gray-500 mb-0.5">
-          <span>Podium</span>
-          <span>{pct(driver.podium_probability)}</span>
+      <div className="grid grid-cols-3 gap-2 w-full mt-1 text-center">
+        <div className="rounded-lg bg-carbon-900/50 border border-carbon-700/50 px-2 py-1.5">
+          <div className="text-[9px] text-gray-500 uppercase tracking-widest">Grid</div>
+          <div className="text-sm font-black text-white">{driver.grid_position != null ? `P${driver.grid_position}` : '—'}</div>
         </div>
-        <div className="h-1.5 rounded-full bg-carbon-700 overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${podPct}%`, background: col }}
-          />
+        <div className="rounded-lg bg-carbon-900/50 border border-carbon-700/50 px-2 py-1.5">
+          <div className="text-[9px] text-gray-500 uppercase tracking-widest">Quali</div>
+          <div className="text-sm font-black text-white">{driver.qual_position != null ? `P${driver.qual_position}` : '—'}</div>
+        </div>
+        <div className="rounded-lg bg-carbon-900/50 border border-carbon-700/50 px-2 py-1.5">
+          <div className="text-[9px] text-gray-500 uppercase tracking-widest">Estimate</div>
+          <div className="text-sm font-black" style={{ color: col }}>
+            P{driver.predicted_finish_value != null ? driver.predicted_finish_value.toFixed(1) : driver.predicted_position}
+          </div>
         </div>
       </div>
 
-      {/* Grid position */}
-      {driver.grid_position && (
-        <div className="text-xs text-gray-500">
-          Grid: <span className="text-gray-300 font-bold">P{driver.grid_position}</span>
+      {gridDelta != null && (
+        <div
+          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+            gridDelta > 0
+              ? 'bg-green-500/15 text-green-400 border-green-500/30'
+              : gridDelta < 0
+              ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30'
+              : 'bg-carbon-700/40 text-gray-300 border-carbon-600'
+          }`}
+        >
+          {gridDelta > 0
+            ? `+${gridDelta} vs grid`
+            : gridDelta < 0
+            ? `${gridDelta} vs grid`
+            : 'Matches grid'}
         </div>
       )}
 
@@ -161,16 +159,25 @@ function PodiumCard({
   );
 }
 
-function ProbabilityBar({ driver, maxProb }: { driver: any; maxProb: number }) {
-  const col = driverColor(driver.driver_code);
-  const width = maxProb > 0 ? (driver.win_probability / maxProb) * 100 : 0;
+function ProbabilityBar({ driver }: { driver: any }) {
+  const col = driver.style?.color ?? '#888';
   const isTop3 = driver.predicted_position <= 3;
+  const gridDelta =
+    driver.grid_position != null
+      ? driver.grid_position - driver.predicted_position
+      : null;
 
   return (
-    <div className="flex items-center gap-3 py-1.5">
+    <div
+      className={`flex items-center gap-3 py-2 px-2 rounded-lg border ${
+        isTop3
+          ? 'border-carbon-600 bg-carbon-900/40'
+          : 'border-transparent'
+      }`}
+    >
       {/* Predicted pos */}
-      <span className="text-xs text-gray-500 w-5 text-right font-mono">
-        {driver.predicted_position}
+      <span className="text-sm text-white w-10 text-center font-black font-mono rounded-md bg-carbon-700/70 py-1 shrink-0">
+        P{driver.predicted_position}
       </span>
 
       {/* Driver chip */}
@@ -181,23 +188,38 @@ function ProbabilityBar({ driver, maxProb }: { driver: any; maxProb: number }) {
         {driver.driver_code}
       </span>
 
-      {/* Bar */}
-      <div className="flex-1 h-5 bg-carbon-700/60 rounded overflow-hidden">
-        <div
-          className="h-full rounded flex items-center pl-2 transition-all duration-700"
-          style={{ width: `${Math.max(width, 4)}%`, background: `${col}cc` }}
-        >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm font-bold text-white">
+            Predicted finish P{driver.predicted_position}
+          </span>
           {isTop3 && (
-            <span className="text-[9px] font-black text-white/80 whitespace-nowrap">
-              {pct(driver.win_probability)}
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-500/15 border border-yellow-500/30 text-yellow-400">
+              Top 3
             </span>
+          )}
+        </div>
+        <div className="text-[11px] text-gray-500 mt-0.5">
+          Grid {driver.grid_position != null ? `P${driver.grid_position}` : '—'}
+          {' · '}
+          Quali {driver.qual_position != null ? `P${driver.qual_position}` : '—'}
+          {gridDelta != null && (
+            <>
+              {' · '}
+              {gridDelta > 0
+                ? `Expected gain +${gridDelta}`
+                : gridDelta < 0
+                ? `Expected loss ${Math.abs(gridDelta)}`
+                : 'Expected no change'}
+            </>
           )}
         </div>
       </div>
 
-      {/* Value label */}
-      <span className="text-xs font-mono text-gray-400 w-12 text-right">
-        {pct(driver.win_probability)}
+      <span className="text-xs font-mono text-gray-400 w-20 text-right shrink-0">
+        {driver.predicted_finish_value != null
+          ? `P${driver.predicted_finish_value.toFixed(1)}`
+          : `P${driver.predicted_position}`}
       </span>
 
       {/* Actual result */}
@@ -294,10 +316,18 @@ export default function PredictionsPage() {
 
   const years = [...new Set(races.map((r) => r.year))].sort((a, b) => b - a);
   const filteredRaces = selectedYear ? races.filter((r) => r.year === selectedYear) : races;
-
-  const maxWinProb = prediction
-    ? Math.max(...prediction.drivers.map((d: any) => d.win_probability))
-    : 1;
+  const predictionDriverStyles = useMemo(
+    () =>
+      buildDriverStyles(
+        (prediction?.drivers ?? []).map((d: any) => ({
+          driver_code: d.driver_code,
+          team_name: d.team_name,
+          predicted_position: d.predicted_position,
+          grid_position: d.grid_position,
+        }))
+      ),
+    [prediction]
+  );
   const maxImp = prediction?.feature_importance?.length
     ? Math.max(...prediction.feature_importance.map((f: any) => f.importance))
     : 1;
@@ -328,9 +358,9 @@ export default function PredictionsPage() {
               </h1>
             </div>
             <p className="text-gray-400 text-sm max-w-xl">
-              Machine learning models trained on all historical race data predict
-              podium probabilities. Select a race and a model to see the prediction —
-              or validate against races that already happened.
+              Machine learning models trained on historical race data rank the
+              full field and project each driver's finishing position using grid,
+              qualifying, recent form, and circuit-specific context.
             </p>
           </div>
           {prediction && (
@@ -489,9 +519,9 @@ export default function PredictionsPage() {
                 </div>
                 <div className="h-8 w-px bg-carbon-600 hidden sm:block" />
                 <div>
-                  <div className="text-[11px] text-gray-500 uppercase tracking-widest">Train accuracy</div>
+                  <div className="text-[11px] text-gray-500 uppercase tracking-widest">Train MAE</div>
                   <div className="text-sm font-bold text-white">
-                    {(prediction.backtest_accuracy * 100).toFixed(1)}%
+                    {prediction.backtest_mae != null ? `${prediction.backtest_mae.toFixed(2)} pos` : '—'}
                   </div>
                 </div>
                 {hasActualResults && predAcc !== null && (
@@ -526,38 +556,53 @@ export default function PredictionsPage() {
                 </p>
               </div>
 
-              {/* Podium prediction */}
+              {/* Top 3 projection */}
               <div className="bg-carbon-800 rounded-xl border border-carbon-700 p-5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">
-                  Podium Prediction
+                  Projected Top 3 Finishers
                 </h3>
                 <div className="grid grid-cols-3 gap-3 items-end">
                   {/* P2 left, P1 centre elevated, P3 right */}
                   {prediction.podium_prediction[1] && (
-                    <PodiumCard rank={2} driver={prediction.podium_prediction[1]} />
+                    <PodiumCard
+                      rank={2}
+                      driver={prediction.podium_prediction[1]}
+                      style={predictionDriverStyles[prediction.podium_prediction[1].driver_code]}
+                    />
                   )}
                   {prediction.podium_prediction[0] && (
-                    <PodiumCard rank={1} driver={prediction.podium_prediction[0]} />
+                    <PodiumCard
+                      rank={1}
+                      driver={prediction.podium_prediction[0]}
+                      style={predictionDriverStyles[prediction.podium_prediction[0].driver_code]}
+                    />
                   )}
                   {prediction.podium_prediction[2] && (
-                    <PodiumCard rank={3} driver={prediction.podium_prediction[2]} />
+                    <PodiumCard
+                      rank={3}
+                      driver={prediction.podium_prediction[2]}
+                      style={predictionDriverStyles[prediction.podium_prediction[2].driver_code]}
+                    />
                   )}
                 </div>
               </div>
 
-              {/* Full grid — win probability bars */}
+              {/* Full grid — predicted finishing order */}
               <div className="bg-carbon-800 rounded-xl border border-carbon-700 p-5">
                 <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500 mb-4">
-                  Win Probability — All Drivers
+                  Predicted Finishing Order
                   {hasActualResults && (
                     <span className="ml-2 normal-case text-gray-600 font-normal">
-                      (coloured actual results shown on right)
+                      (actual results shown on the right when available)
                     </span>
                   )}
                 </h3>
                 <div className="space-y-0.5">
                   {prediction.drivers.map((d: any) => (
-                    <ProbabilityBar key={d.driver_code} driver={d} maxProb={maxWinProb} />
+                    <ProbabilityBar
+                      key={d.driver_code}
+                      driver={{ ...d, style: predictionDriverStyles[d.driver_code] }}
+                    />
                   ))}
                 </div>
               </div>
@@ -598,6 +643,7 @@ export default function PredictionsPage() {
                     <thead>
                       <tr className="border-b border-carbon-700 text-gray-500 uppercase tracking-wider">
                         <th className="text-left py-2 px-2">Driver</th>
+                        <th className="text-right py-2 px-2">Pred</th>
                         <th className="text-right py-2 px-2">Grid</th>
                         <th className="text-right py-2 px-2">Qual Pos</th>
                         <th className="text-right py-2 px-2">Gap Pole</th>
@@ -605,11 +651,11 @@ export default function PredictionsPage() {
                         <th className="text-right py-2 px-2">Recent Avg</th>
                         <th className="text-right py-2 px-2">Circuit Avg</th>
                         <th className="text-right py-2 px-2">Circ Wins</th>
-                        <th className="text-right py-2 px-2">Podium%</th>
+                        <th className="text-right py-2 px-2">Form Pod%</th>
                         <th className="text-right py-2 px-2">Team Avg</th>
                         <th className="text-right py-2 px-2">DNF%</th>
                         <th className="text-right py-2 px-2">Pit Avg</th>
-                        <th className="text-right py-2 px-2">Win %</th>
+                        <th className="text-right py-2 px-2">Est Finish</th>
                         {hasActualResults && (
                           <th className="text-right py-2 px-2">Actual</th>
                         )}
@@ -617,7 +663,8 @@ export default function PredictionsPage() {
                     </thead>
                     <tbody>
                       {prediction.drivers.map((d: any) => {
-                        const col = driverColor(d.driver_code);
+                        const style = predictionDriverStyles[d.driver_code];
+                        const col = style?.color ?? '#888';
                         return (
                           <tr
                             key={d.driver_code}
@@ -630,6 +677,9 @@ export default function PredictionsPage() {
                               >
                                 {d.driver_code}
                               </span>
+                            </td>
+                            <td className="py-2 px-2 text-right font-black text-white font-mono">
+                              P{d.predicted_position}
                             </td>
                             <td className="py-2 px-2 text-right text-gray-300 font-mono">
                               {d.grid_position ?? '—'}
@@ -675,7 +725,7 @@ export default function PredictionsPage() {
                               {d.features.avg_pit_stops != null ? d.features.avg_pit_stops.toFixed(1) : '—'}
                             </td>
                             <td className="py-2 px-2 text-right font-bold font-mono" style={{ color: col }}>
-                              {pct(d.win_probability)}
+                              {d.predicted_finish_value != null ? `P${d.predicted_finish_value.toFixed(1)}` : '—'}
                             </td>
                             {hasActualResults && (
                               <td className="py-2 px-2 text-right font-mono">
@@ -711,8 +761,9 @@ export default function PredictionsPage() {
                 <span className="text-white">{prediction.training_samples}</span> historical race
                 entries using strictly prior data (no future leakage). Features include grid
                 position, driver recent form, season standing, circuit-specific history, and
-                constructor strength. Win probabilities are normalised across all drivers in the
-                field to sum to 100%.
+                constructor strength. The projected finishing order is produced by ranking the
+                field on model-estimated win likelihood, then assigning finishing positions from
+                P1 downward.
               </div>
             </>
           )}

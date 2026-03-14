@@ -5,10 +5,10 @@ Trains ML / DL models on historical race-result data and predicts the outcome
 of any race in the database.
 
 Models available:
-  gb  – Gradient Boosting Classifier  (scikit-learn, tree-based ML)
-  rf  – Random Forest Classifier       (scikit-learn, tree-based ML)
-  nn  – MLP Neural Network             (scikit-learn, deep learning)
-  xgb – XGBoost Classifier             (extreme gradient boosting)
+    gb  – Gradient Boosting Regressor  (scikit-learn, tree-based ML)
+    rf  – Random Forest Regressor      (scikit-learn, tree-based ML)
+    nn  – MLP Regressor                (scikit-learn, deep learning)
+    xgb – XGBoost Regressor            (extreme gradient boosting)
 
 Features used (17 total):
   grid_pos            – grid position (start position on race day)
@@ -45,13 +45,12 @@ from sqlalchemy import text
 
 from database.config import get_db
 
-from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score
-from sklearn.utils.class_weight import compute_sample_weight
-from xgboost import XGBClassifier
+from sklearn.metrics import mean_absolute_error
+from xgboost import XGBRegressor
 
 router = APIRouter()
 
@@ -155,10 +154,12 @@ def _load_results(db: Session) -> pd.DataFrame:
             COALESCE(res.grid_position, 10) AS grid_position,
             COALESCE(res.points, 0)         AS points,
             res.team_id,
+            t.name                          AS team_name,
             d.code                          AS driver_code
         FROM results res
         JOIN races   r ON r.id  = res.race_id
         JOIN drivers d ON d.id  = res.driver_id
+        JOIN teams   t ON t.id  = res.team_id
         WHERE res.is_sprint = false
         ORDER BY r.date, r.id, res.position
     """)
@@ -173,6 +174,64 @@ def _load_results(db: Session) -> pd.DataFrame:
     df["points"]         = pd.to_numeric(df["points"],         errors="coerce").fillna(0.0)
 
     df = df.sort_values(["race_date", "race_id", "position"]).reset_index(drop=True)
+    return df
+
+
+def _load_pre_race_candidates(db: Session, race_id: int) -> pd.DataFrame:
+    """Build prediction rows for races that have qualifying data but no race result rows yet."""
+    sql = text("""
+        WITH target_race AS (
+            SELECT
+                r.id,
+                r.circuit_id,
+                r.date AS race_date,
+                r.season_id,
+                r.round_number,
+                r.name AS race_name
+            FROM races r
+            WHERE r.id = :race_id
+        ),
+        latest_team AS (
+            SELECT DISTINCT ON (res.driver_id)
+                res.driver_id,
+                res.team_id
+            FROM results res
+            JOIN races rr ON rr.id = res.race_id
+            JOIN target_race tr ON TRUE
+            WHERE rr.date <= tr.race_date
+            ORDER BY res.driver_id, rr.date DESC, rr.id DESC, res.is_sprint ASC
+        )
+        SELECT
+            tr.id                           AS race_id,
+            tr.circuit_id,
+            tr.race_date,
+            tr.season_id,
+            tr.round_number,
+            tr.race_name,
+            q.driver_id,
+            NULL::numeric                   AS position,
+            COALESCE(q.position, 10)        AS grid_position,
+            0.0                             AS points,
+            lt.team_id,
+            t.name                          AS team_name,
+            d.code                          AS driver_code
+        FROM target_race tr
+        JOIN qualifying q ON q.race_id = tr.id
+        JOIN drivers d ON d.id = q.driver_id
+        LEFT JOIN latest_team lt ON lt.driver_id = q.driver_id
+        LEFT JOIN teams t ON t.id = lt.team_id
+        ORDER BY COALESCE(q.position, 999), d.code
+    """)
+    rows = db.execute(sql, {"race_id": race_id}).mappings().all()
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame([dict(r) for r in rows])
+    df["race_date"] = pd.to_datetime(df["race_date"])
+    df["position"] = pd.to_numeric(df["position"], errors="coerce")
+    df["grid_position"] = pd.to_numeric(df["grid_position"], errors="coerce").fillna(10.0)
+    df["points"] = pd.to_numeric(df["points"], errors="coerce").fillna(0.0)
+    df = df.sort_values(["race_date", "race_id", "grid_position", "driver_code"]).reset_index(drop=True)
     return df
 
 
@@ -489,18 +548,17 @@ def _engineer_features(
 
 def _make_model(model_type: str):
     if model_type == "nn":
-        # Pipeline with StandardScaler to normalise  features before feeding to MLP.
-        # sample_weight is passed via clf__sample_weight in fit() to fix class imbalance.
+        # Pipeline with StandardScaler to normalise features before feeding to MLP.
         return Pipeline([
             ("scaler", StandardScaler()),
-            ("clf", MLPClassifier(
+            ("reg", MLPRegressor(
                 hidden_layer_sizes=(128, 64, 32),
                 activation="relu",
                 solver="adam",
                 learning_rate_init=0.001,
                 alpha=0.001,          # L2 regularisation
                 batch_size=64,
-                max_iter=800,
+                max_iter=1000,
                 random_state=42,
                 early_stopping=True,
                 validation_fraction=0.15,
@@ -509,7 +567,7 @@ def _make_model(model_type: str):
             )),
         ])
     elif model_type == "xgb":
-        return XGBClassifier(
+        return XGBRegressor(
             n_estimators=500,
             max_depth=5,
             learning_rate=0.03,
@@ -521,52 +579,31 @@ def _make_model(model_type: str):
             reg_lambda=1.0,
             random_state=42,
             n_jobs=-1,
-            eval_metric="logloss",
+            objective="reg:squarederror",
+            eval_metric="mae",
             verbosity=0,
         )
     elif model_type == "rf":
-        return RandomForestClassifier(
-            n_estimators=300, max_depth=7, min_samples_leaf=2,
-            class_weight="balanced",
+        return RandomForestRegressor(
+            n_estimators=400, max_depth=9, min_samples_leaf=2,
             random_state=42, n_jobs=-1,
         )
     else:  # "gb" – default
-        return GradientBoostingClassifier(
+        return GradientBoostingRegressor(
             n_estimators=300, max_depth=4, learning_rate=0.05,
             subsample=0.8, random_state=42,
         )
 
 
-def _oversample(X: np.ndarray, y: np.ndarray, target_pos_frac: float = 0.20, seed: int = 42):
-    """
-    Oversample the minority class by repeating its rows until it reaches
-    `target_pos_frac` of the dataset.  Used for MLPClassifier which has no
-    native sample_weight support.
-    """
-    rng = np.random.RandomState(seed)
-    pos_idx = np.where(y == 1)[0]
-    neg_idx = np.where(y == 0)[0]
-    if len(pos_idx) == 0 or len(neg_idx) == 0:
-        return X, y
-    n_pos_target = int(len(neg_idx) * target_pos_frac / max(1 - target_pos_frac, 1e-6))
-    extra_needed = max(0, n_pos_target - len(pos_idx))
-    if extra_needed == 0:
-        return X, y
-    extra_idx = rng.choice(pos_idx, size=extra_needed, replace=True)
-    aug_idx = np.concatenate([np.arange(len(y)), extra_idx])
-    rng.shuffle(aug_idx)
-    return X[aug_idx], y[aug_idx]
-
-
 def _get_feature_importance(model, model_type: str):
     """Extract feature importances (tree-based models only)."""
     try:
-        clf = model.named_steps.get("clf", model) if hasattr(model, "named_steps") else model
-        if hasattr(clf, "feature_importances_"):
+        estimator = model.named_steps.get("reg", model) if hasattr(model, "named_steps") else model
+        if hasattr(estimator, "feature_importances_"):
             return [
                 {"feature": name, "importance": round(float(imp), 4)}
                 for name, imp in sorted(
-                    zip(FEATURE_NAMES, clf.feature_importances_),
+                    zip(FEATURE_NAMES, estimator.feature_importances_),
                     key=lambda x: -x[1],
                 )
             ]
@@ -623,19 +660,21 @@ MODEL_META = {
 
 @router.get("/races")
 async def list_predictable_races(db: Session = Depends(get_db)):
-    """List races that have result data (usable for prediction or validation)."""
+    """List races that can be predicted from race results or pre-race qualifying data."""
     sql = text("""
         SELECT
             r.id, r.name, r.date, r.round_number,
             s.year,
             c.country, c.location,
-            COUNT(res.id) AS result_count
+            COUNT(DISTINCT race_res.id) AS race_result_count,
+            COUNT(DISTINCT q.id)        AS qualifying_count
         FROM races r
         JOIN seasons  s  ON s.id = r.season_id
         JOIN circuits c  ON c.id = r.circuit_id
-        LEFT JOIN results res ON res.race_id = r.id AND res.is_sprint = false
+        LEFT JOIN results race_res ON race_res.race_id = r.id AND race_res.is_sprint = false
+        LEFT JOIN qualifying q ON q.race_id = r.id
         GROUP BY r.id, r.name, r.date, r.round_number, s.year, c.country, c.location
-        HAVING COUNT(res.id) > 0
+        HAVING COUNT(DISTINCT race_res.id) > 0 OR COUNT(DISTINCT q.id) > 0
         ORDER BY r.date DESC
         LIMIT 60
     """)
@@ -649,7 +688,8 @@ async def list_predictable_races(db: Session = Depends(get_db)):
             "year":        r["year"],
             "country":     r["country"],
             "location":    r["location"],
-            "has_results": r["result_count"] > 0,
+            "has_results": r["race_result_count"] > 0,
+            "has_prerace_data": r["qualifying_count"] > 0,
         }
         for r in rows
     ]
@@ -663,7 +703,7 @@ async def predict_race(
 ):
     """
     Train a model on all races *before* `race_id` and predict its outcome.
-    Returns win/podium probabilities per driver plus feature importances.
+    Returns a projected finishing order per driver plus feature importances.
     If the race already has results, 'actual_position' is included for validation.
     """
     # 1. Load + engineer features ─────────────────────────────────────────────
@@ -679,60 +719,81 @@ async def predict_race(
     df = _engineer_features(df_raw, qual_df, fp2_df, dnf_df, pit_df, weather_df)
 
     # 2. Train / predict split ─────────────────────────────────────────────────
-    train_df   = df[df["race_id"] != race_id].dropna(subset=FEATURE_COLS)
+    train_df = df[df["race_id"] != race_id].dropna(subset=FEATURE_COLS)
     predict_df = df[df["race_id"] == race_id].copy()
 
+    # For races without final race results yet, build driver rows from
+    # qualifying so we can still generate pre-race predictions.
     if predict_df.empty:
-        raise HTTPException(404, "Race not found or no competitor data")
+        pre_race_df = _load_pre_race_candidates(db, race_id)
+        if pre_race_df.empty:
+            raise HTTPException(404, "Race not found or no competitor data (need qualifying or race results)")
+
+        combined_df = pd.concat([df_raw, pre_race_df], ignore_index=True, sort=False)
+        combined_df["race_date"] = pd.to_datetime(combined_df["race_date"])
+        combined_df["position"] = pd.to_numeric(combined_df["position"], errors="coerce")
+        combined_df["grid_position"] = pd.to_numeric(combined_df["grid_position"], errors="coerce").fillna(10.0)
+        combined_df["points"] = pd.to_numeric(combined_df["points"], errors="coerce").fillna(0.0)
+        combined_df = combined_df.sort_values(
+            ["race_date", "race_id", "position"],
+            na_position="last",
+        ).reset_index(drop=True)
+
+        df = _engineer_features(combined_df, qual_df, fp2_df, dnf_df, pit_df, weather_df)
+        train_df = df[df["race_id"] != race_id].dropna(subset=FEATURE_COLS)
+        predict_df = df[df["race_id"] == race_id].copy()
+
     if len(train_df) < 80:
         raise HTTPException(
             400,
             f"Only {len(train_df)} training samples – need at least 80 rows of historical data",
         )
 
-    X_train  = train_df[FEATURE_COLS].values.astype(float)
-    y_win    = train_df["is_win"].values
-    y_podium = train_df["is_podium"].values
-    X_pred   = predict_df[FEATURE_COLS].fillna(10.0).values.astype(float)
+    X_train = train_df[FEATURE_COLS].fillna(10.0).values.astype(float)
+    y_finish = train_df["pos_filled"].values.astype(float)
+    X_pred = predict_df[FEATURE_COLS].fillna(10.0).values.astype(float)
 
-    # 3. Train both models ─────────────────────────────────────────────────────
+    # 3. Train direct finishing-position model ─────────────────────────────────
     try:
-        clf_win    = _make_model(model_type)
-        clf_podium = _make_model(model_type)
+        model = _make_model(model_type)
+        sample_weight = np.clip(25.0 - y_finish, 1.0, None)
         if model_type == "nn":
-            # MLPClassifier does not accept sample_weight; oversample the minority
-            # class instead so wins (~5%) reach ~20% of the training set.
-            clf_win.fit(*_oversample(X_train, y_win,    target_pos_frac=0.20))
-            clf_podium.fit(*_oversample(X_train, y_podium, target_pos_frac=0.30))
+            model.fit(X_train, y_finish)
         else:
-            sw_win    = compute_sample_weight("balanced", y_win)
-            sw_podium = compute_sample_weight("balanced", y_podium)
-            clf_win.fit(X_train, y_win, sample_weight=sw_win)
-            clf_podium.fit(X_train, y_podium, sample_weight=sw_podium)
+            model.fit(X_train, y_finish, sample_weight=sample_weight)
     except Exception as exc:
         raise HTTPException(500, f"Model training failed: {exc}")
 
-    # 4. Predict ───────────────────────────────────────────────────────────────
-    win_raw    = clf_win.predict_proba(X_pred)[:, 1]
-    podium_raw = clf_podium.predict_proba(X_pred)[:, 1]
+    # 4. Predict expected finishing position ───────────────────────────────────
+    raw_finish_pred = np.asarray(model.predict(X_pred), dtype=float)
+    raw_finish_pred = np.clip(raw_finish_pred, 1.0, float(max(len(predict_df), 20)))
 
-    # Normalise win probabilities so they sum to 1 (they represent relative likelihood)
-    w_sum    = win_raw.sum()
-    win_norm = win_raw / w_sum if w_sum > 0 else np.ones(len(win_raw)) / len(win_raw)
-
-    # 5. Backtest accuracy on training set ────────────────────────────────────
-    backtest_acc = round(float(accuracy_score(y_win, clf_win.predict(X_train))), 3)
+    # 5. Backtest using ranked finishing positions ─────────────────────────────
+    train_raw_pred = np.asarray(model.predict(X_train), dtype=float)
+    train_raw_pred = np.clip(train_raw_pred, 1.0, 20.0)
+    train_eval = train_df[["race_id", "driver_code", "pos_filled"]].copy()
+    train_eval["predicted_finish"] = train_raw_pred
+    train_eval = train_eval.sort_values(["race_id", "predicted_finish", "driver_code"]).reset_index(drop=True)
+    train_eval["predicted_position"] = train_eval.groupby("race_id").cumcount() + 1
+    backtest_mae = round(
+        float(mean_absolute_error(train_eval["pos_filled"], train_eval["predicted_position"])),
+        3,
+    )
+    backtest_exact = round(
+        float((train_eval["pos_filled"].astype(int) == train_eval["predicted_position"]).mean()),
+        3,
+    )
 
     # 6. Build per-driver results ─────────────────────────────────────────────
     drivers_out = []
     for i, row in enumerate(predict_df.itertuples(index=False)):
         drivers_out.append({
             "driver_code":        str(row.driver_code),
+            "team_name":          str(row.team_name) if pd.notna(row.team_name) else None,
             "grid_position":      int(row.grid_position) if pd.notna(row.grid_position) else None,
             "qual_position":      int(row.qual_position) if pd.notna(row.qual_position) else None,
+            "predicted_finish_value": round(float(raw_finish_pred[i]), 2),
             "gap_to_pole":        round(float(row.gap_to_pole), 3) if pd.notna(row.gap_to_pole) else None,
-            "win_probability":    round(float(win_norm[i]), 4),
-            "podium_probability": round(float(min(podium_raw[i], 1.0)), 4),
             "actual_position":    int(row.position) if pd.notna(row.position) else None,
             "features": {
                 "recent_avg":           round(float(row.recent_avg),           2),
@@ -752,10 +813,21 @@ async def predict_race(
             },
         })
 
-    # Sort by win probability → assign predicted positions
-    drivers_out.sort(key=lambda d: d["win_probability"], reverse=True)
+    # Sort by expected finish (lower is better) → assign predicted positions
+    drivers_out.sort(
+        key=lambda d: (
+            d["predicted_finish_value"],
+            d["grid_position"] if d["grid_position"] is not None else 999,
+            d["driver_code"],
+        )
+    )
     for i, d in enumerate(drivers_out):
         d["predicted_position"] = i + 1
+        d["position_delta"] = (
+            d["grid_position"] - d["predicted_position"]
+            if d["grid_position"] is not None
+            else None
+        )
 
     race_row = predict_df.iloc[0]
 
@@ -766,9 +838,10 @@ async def predict_race(
         "model_type":        model_type,
         "model":             MODEL_META.get(model_type, {"name": model_type, "label": model_type, "description": ""}),
         "training_samples":  int(len(train_df)),
-        "backtest_accuracy": backtest_acc,
+        "backtest_mae":      backtest_mae,
+        "backtest_accuracy": backtest_exact,
         "drivers":           drivers_out,
         "podium_prediction": drivers_out[:3],
         "winner_prediction": drivers_out[0] if drivers_out else None,
-        "feature_importance": _get_feature_importance(clf_win, model_type),
+        "feature_importance": _get_feature_importance(model, model_type),
     }

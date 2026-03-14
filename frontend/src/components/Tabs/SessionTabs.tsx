@@ -19,8 +19,9 @@ export default function SessionTabs({ sessions, activeSessionId, onTabChange }: 
     if (sessionType.includes('Practice 1') || sessionType === 'FP1') return 'FP1';
     if (sessionType.includes('Practice 2') || sessionType === 'FP2') return 'FP2';
     if (sessionType.includes('Practice 3') || sessionType === 'FP3') return 'FP3';
+    if (sessionType.includes('Sprint Qualifying') || sessionType.includes('Sprint Shootout')) return 'Sprint Qualifying';
+    if (sessionType === 'Sprint') return 'Sprint';
     if (sessionType.includes('Qualifying')) return 'Qualifying';
-    if (sessionType.includes('Sprint')) return 'Sprint';
     if (sessionType === 'Race') return 'Race';
     return sessionType;
   };
@@ -28,6 +29,7 @@ export default function SessionTabs({ sessions, activeSessionId, onTabChange }: 
   const getTabIcon = (sessionType: string) => {
     const label = getTabLabel(sessionType);
     if (label.startsWith('FP')) return '🏎️';
+    if (label === 'Sprint Qualifying') return '⚡';
     if (label === 'Qualifying') return '⏱️';
     if (label === 'Sprint') return '⚡';
     if (label === 'Race') return '🏁';

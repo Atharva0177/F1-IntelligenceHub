@@ -5,7 +5,7 @@ from database.config import get_db
 from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData, RaceControlMessage, PitStop
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 router = APIRouter()
 
@@ -152,7 +152,7 @@ async def get_races(
             status = "COMPLETED"
             
         # Find winner (position 1)
-        winner = next((r for r in race.results if r.position == 1), None)
+        winner = next((r for r in race.results if r.position == 1 and not r.is_sprint), None)
         if winner:
             winner_name = _driver_full_name(winner.driver)
             winner_team = winner.team.name
@@ -196,7 +196,7 @@ async def get_season_calendar(year: int, db: Session = Depends(get_db)):
 
     result = []
     for race in races:
-        winner = next((r for r in race.results if r.position == 1), None)
+        winner = next((r for r in race.results if r.position == 1 and not r.is_sprint), None)
         is_completed = bool(winner or (race.date and race.date < date.today()))
         result.append({
             "id": race.id,
@@ -226,6 +226,28 @@ async def get_data_version(db: Session = Depends(get_db)):
     return {"version": max(max_session, max_result)}
 
 
+@router.get("/next-session")
+async def get_next_session(db: Session = Depends(get_db)):
+    """Return the next upcoming session (across all seasons) with its race name."""
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    row = (
+        db.query(DBSession, Race)
+        .join(Race, DBSession.race_id == Race.id)
+        .filter(DBSession.date.isnot(None), DBSession.date > now)
+        .order_by(DBSession.date.asc())
+        .first()
+    )
+    if not row:
+        return None
+    session, race = row
+    return {
+        "race_id": race.id,
+        "race_name": race.name,
+        "session_type": session.session_type,
+        "session_date": session.date.isoformat() + "Z",
+    }
+
+
 @router.get("/{race_id}", response_model=RaceDetailSchema)
 async def get_race_detail(race_id: int, db: Session = Depends(get_db)):
     """
@@ -241,8 +263,11 @@ async def get_race_detail(race_id: int, db: Session = Depends(get_db)):
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
     
-    # Find pole position (grid position 1)
-    pole_position = next((r for r in race.results if r.grid_position == 1), None)
+    # Separate race results from sprint results
+    race_only_results = [r for r in race.results if not r.is_sprint]
+
+    # Find pole position (grid position 1) — from race/qualifying, not sprint
+    pole_position = next((r for r in race_only_results if r.grid_position == 1), None)
     pole_driver = None
     pole_team = None
     if pole_position:
@@ -253,7 +278,7 @@ async def get_race_detail(race_id: int, db: Session = Depends(get_db)):
     fastest_lap_time = None
     fastest_lap_driver_name = None
 
-    results_with_fastest = [r for r in race.results if r.fastest_lap_time]
+    results_with_fastest = [r for r in race_only_results if r.fastest_lap_time]
     if results_with_fastest:
         best_result = min(results_with_fastest, key=lambda r: r.fastest_lap_time)
         fastest_lap_time = best_result.fastest_lap_time
@@ -306,31 +331,46 @@ async def get_race_detail(race_id: int, db: Session = Depends(get_db)):
             "points": result.points,
             "status": result.status,
             "laps_completed": result.laps_completed,
-        } for result in sorted(race.results, key=lambda r: r.position if r.position else 999)]
+        } for result in sorted(race_only_results, key=lambda r: r.position if r.position else 999)]
     }
 
 
 @router.get("/{race_id}/sessions", response_model=List[SessionSchema])
 async def get_race_sessions(race_id: int, db: Session = Depends(get_db)):
     """
-    Get all sessions for a specific race (FP1, FP2, FP3, Qualifying, Sprint, Race)
+    Get all sessions for a specific race.
+    Uses session datetime ordering when available so sprint weekends naturally
+    appear as FP1 -> Sprint Qualifying -> Sprint -> Qualifying -> Race.
     """
     race = db.query(Race).options(
         joinedload(Race.sessions)
     ).filter(Race.id == race_id).first()
-    
+
     if not race:
         raise HTTPException(status_code=404, detail="Race not found")
-    
-    # Sort sessions by typical order
-    session_order = {
-        'FP1': 1, 'FP2': 2, 'FP3': 3,
-        'Practice 1': 1, 'Practice 2': 2, 'Practice 3': 3,
-        'Qualifying': 4, 'Sprint': 5, 'Race': 6
+
+    # Fallback order for legacy rows that do not have session timestamps.
+    fallback_order = {
+        'FP1': 1,
+        'FP2': 2,
+        'FP3': 3,
+        'Practice 1': 1,
+        'Practice 2': 2,
+        'Practice 3': 3,
+        'Sprint Qualifying': 2,
+        'Sprint Shootout': 2,
+        'Sprint': 3,
+        'Qualifying': 4,
+        'Race': 5,
     }
-    
-    sessions = sorted(race.sessions, key=lambda s: session_order.get(s.session_type, 99))
-    
+
+    def _session_sort_key(session: DBSession):
+        if session.date is not None:
+            return (0, session.date, 0, session.id)
+        return (1, datetime.max, fallback_order.get(session.session_type, 99), session.id)
+
+    sessions = sorted(race.sessions, key=_session_sort_key)
+
     return [{
         "id": session.id,
         "session_type": session.session_type,

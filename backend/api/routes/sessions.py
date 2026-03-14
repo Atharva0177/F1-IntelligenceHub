@@ -71,24 +71,28 @@ async def get_session_results(
     
     session_type = session.session_type
     
-    # 1. Race Results
-    if session_type == 'Race':
-        # Query Result table
-        results = db.query(Result).filter(Result.race_id == session.race_id).all()
-        
-        return [{
-            "position": r.position,
-            "driver_code": r.driver.code,
-            "driver_name": f"{r.driver.first_name or ''} {r.driver.last_name or ''}".strip(),
-            # TODO: consolidate with _driver_full_name helper once broadcast format is cleaned
-            "team_name": r.team.name,
-            "grid_position": r.grid_position,
-            "points": r.points,
-            "status": r.status,
-            "laps_completed": r.laps_completed,
-            "fastest_lap_time": r.fastest_lap_time,
-            "time": r.race_time_seconds  # Total race time
-        } for r in sorted(results, key=lambda x: x.position if x.position else 999)]
+    # 1. Race / Sprint Results
+    if session_type in ('Race', 'Sprint'):
+        is_sprint_session = session_type == 'Sprint'
+        results = db.query(Result).filter(
+            Result.race_id == session.race_id,
+            Result.is_sprint == is_sprint_session,
+        ).all()
+
+        if results:
+            return [{
+                "position": r.position,
+                "driver_code": r.driver.code,
+                "driver_name": f"{r.driver.first_name or ''} {r.driver.last_name or ''}".strip(),
+                # TODO: consolidate with _driver_full_name helper once broadcast format is cleaned
+                "team_name": r.team.name,
+                "grid_position": r.grid_position,
+                "points": r.points,
+                "status": r.status,
+                "laps_completed": r.laps_completed,
+                "fastest_lap_time": r.fastest_lap_time,
+                "time": r.race_time_seconds  # Total race/sprint time
+            } for r in sorted(results, key=lambda x: x.position if x.position else 999)]
 
     # 2. Qualifying Results
     if session_type == 'Qualifying':

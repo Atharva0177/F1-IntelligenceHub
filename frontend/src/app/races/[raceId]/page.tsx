@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import api from "@/lib/api";
 import { useDataVersion } from "@/lib/useDataVersion";
 import { getDriverImageUrls } from "@/lib/driverImages";
+import { buildDriverStyles } from "@/lib/teamStyles";
 import type { RaceDetail, Session, LapTime } from "@/types";
 import RaceReplay from './RaceReplay';
 import {
@@ -460,58 +461,74 @@ export default function RaceDetailPage() {
       }))
       .sort((a, b) => (a.position || 999) - (b.position || 999)) || [];
 
-  // Driver colors
-  const driverColors: Record<string, string> = {
-    // Mercedes
-    HAM: "#00D2BE",
-    BOT: "#00D2BE",
-    RUS: "#00B4D8",
-    // Red Bull
-    VER: "#3671C6",
-    PER: "#5590D9",
-    // Ferrari
-    VET: "#DC0000",
-    RAI: "#DC0000",
-    LEC: "#E8002D",
-    SAI: "#FF4444",
-    // McLaren
-    NOR: "#FF8000",
-    RIC: "#FF8700",
-    PIA: "#F5A623",
-    // Alpine / Renault
-    ALO: "#0090FF",
-    OCO: "#FF87BC",
-    GAS: "#4895EF",
-    // AlphaTauri / VCARB
-    TSU: "#6692FF",
-    DEV: "#4477CC",
-    LAW: "#5588DD",
-    HAD: "#3366BB",
-    // Aston Martin / Racing Point / Force India
-    STR: "#358C75",
-    SIR: "#00665D",
-    // Williams
-    LAT: "#00A3C8",
-    SAR: "#64C4FF",
-    ALB: "#005AFF",
-    COL: "#00BFFF",
-    // Haas
-    MSC: "#E8402A",
-    MAZ: "#D06030",
-    MAG: "#B6503A",
-    BEA: "#CC3333",
-    // Alfa Romeo / Kick Sauber
-    GIO: "#940030",
-    ZHO: "#D4006C",
-    BOT_ALFA: "#960000",
-    // Old Renault / old teams
-    HUL: "#FFF500",
-    ERI: "#9B0000",
-    GRO: "#9B9B9B",
-    VAN: "#FF8700",
-    HAR: "#469BFF",
-    ANT: "#50C8F0",
-  };
+  // Team-based styles for the active season/session:
+  // same team color for both drivers, with solid/dotted differentiation.
+  const driverStyleRows = useMemo(() => {
+    const byDriver = new Map<
+      string,
+      {
+        driver_code: string;
+        team_name?: string;
+        position?: number;
+        grid_position?: number;
+      }
+    >();
+
+    const upsert = (row: {
+      driver_code: string;
+      team_name?: string;
+      position?: number;
+      grid_position?: number;
+    }) => {
+      if (!row.driver_code) return;
+      const prev = byDriver.get(row.driver_code);
+      if (!prev) {
+        byDriver.set(row.driver_code, row);
+        return;
+      }
+
+      const prevScore = prev.position ?? prev.grid_position ?? 999;
+      const nextScore = row.position ?? row.grid_position ?? 999;
+      if (nextScore < prevScore || (!prev.team_name && row.team_name)) {
+        byDriver.set(row.driver_code, row);
+      }
+    };
+
+    (race?.results || []).forEach((r) => {
+      upsert({
+        driver_code: r.driver_code,
+        team_name: r.team_name,
+        position: r.position,
+        grid_position: r.grid_position,
+      });
+    });
+
+    sessionResults.forEach((r) => {
+      upsert({
+        driver_code: r.driver_code,
+        team_name: r.team_name,
+        position: r.position,
+        grid_position: r.grid_position,
+      });
+    });
+
+    return Array.from(byDriver.values());
+  }, [race, sessionResults]);
+
+  const driverStyles = useMemo(
+    () => buildDriverStyles(driverStyleRows),
+    [driverStyleRows]
+  );
+
+  const driverColors: Record<string, string> = useMemo(() => {
+    const out: Record<string, string> = {};
+    Object.entries(driverStyles).forEach(([code, style]) => {
+      out[code] = style.color;
+    });
+    return out;
+  }, [driverStyles]);
+
+  const getDriverDash = (driverCode: string) => driverStyles[driverCode]?.dashArray;
 
   if (loading) {
     return (
@@ -825,7 +842,7 @@ export default function RaceDetailPage() {
       {/* Tab Content */}
       {activeTab === "results" && (() => {
         const sessionType = sessions.find((s) => s.id === selectedSessionId)?.session_type || "Race";
-        const isRace = sessionType === "Race";
+        const isRace = sessionType === "Race" || sessionType === "Sprint";
         const totalPts = sessionResults.reduce((s, r) => s + (r.points || 0), 0);
         // Deduplicate by position: keep only one driver per position (the one with most points)
         const seenPos = new Set<number>();
@@ -1252,6 +1269,7 @@ export default function RaceDetailPage() {
                         {/* Driver paths */}
                         {visDrivers.map(driver => {
                           const color = driverColors[driver] || '#888';
+                          const dash = getDriverDash(driver);
                           const pts = lapNumbers
                             .map((lap, i) => positions[lap]?.[driver] != null
                               ? { x: xOf(i), y: yOf(positions[lap][driver]), lap, pos: positions[lap][driver] }
@@ -1268,8 +1286,8 @@ export default function RaceDetailPage() {
                           const last = pts[pts.length - 1];
                           return (
                             <g key={driver} opacity={isSelected || selectedDriversForChart.length === 0 ? 1 : 0.1}>
-                              <path d={d} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={5} strokeLinejoin="round" />
-                              <path d={d} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
+                              <path d={d} fill="none" stroke="rgba(0,0,0,0.5)" strokeWidth={5} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={dash} />
+                              <path d={d} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" strokeDasharray={dash} />
                               {/* Driver name on the RIGHT end only */}
                               <text x={last.x + 5} y={last.y + 4} fill={color} fontSize={9}
                                 fontFamily="monospace" fontWeight="bold" textAnchor="start">{driver}</text>
@@ -1289,7 +1307,7 @@ export default function RaceDetailPage() {
 
                 {/* Legend */}
                 <div className="mt-4 flex flex-wrap gap-3">
-                  {[...new Map(race.results.map((d: any) => [d.driver_code, d])).values()].map((driver: any) => (
+                  {driverStyleRows.map((driver) => (
                     <button
                       key={driver.driver_code}
                       onClick={() => {
@@ -1308,6 +1326,9 @@ export default function RaceDetailPage() {
                         backgroundColor:
                           driverColors[driver.driver_code] || "#999",
                         color: "#000",
+                        borderWidth: 1,
+                        borderStyle: driverStyles[driver.driver_code]?.lineStyle === "dotted" ? "dashed" : "solid",
+                        borderColor: "rgba(0,0,0,0.45)",
                       }}
                     >
                       {driver.driver_code}
@@ -1676,7 +1697,10 @@ export default function RaceDetailPage() {
 
                         {/* Driver rows */}
                         <div className="space-y-1">
-                          {race?.results.slice(0, 20).map((driver, index) => {
+                          {(sessionResults.length > 0
+                            ? sessionResults.slice(0, 20).map((r: any) => ({ driver_code: r.driver_code }))
+                            : Array.from(new Set(strategyData.map((s: any) => s.driver_code as string))).slice(0, 20).map((code) => ({ driver_code: code }))
+                          ).map((driver: { driver_code: string }, index: number) => {
                             const driverStints = strategyData
                               .filter(
                                 (s: any) =>
@@ -1817,7 +1841,10 @@ export default function RaceDetailPage() {
                             </p>
                           </div>
                           <div className="space-y-1.5">
-                            {race?.results.slice(0, 20).map((driver) => {
+                            {(sessionResults.length > 0
+                              ? sessionResults.slice(0, 20).map((r: any) => ({ driver_code: r.driver_code }))
+                              : Array.from(new Set(strategyData.map((s: any) => s.driver_code as string))).slice(0, 20).map((code) => ({ driver_code: code }))
+                            ).map((driver: { driver_code: string }) => {
                               const tStints = strategyData
                                 .filter((s: any) => s.driver_code === driver.driver_code)
                                 .sort((a: any, b: any) => a.stint_start - b.stint_start);
@@ -1906,7 +1933,13 @@ export default function RaceDetailPage() {
                       <tbody>
                         {Array.from(
                           new Set(strategyData.map((s) => s.driver_code))
-                        ).map((driverCode) => {
+                        )
+                        .sort((a, b) => {
+                          const posA = sessionResults.find(r => r.driver_code === a)?.position ?? 999;
+                          const posB = sessionResults.find(r => r.driver_code === b)?.position ?? 999;
+                          return posA - posB;
+                        })
+                        .map((driverCode) => {
                           const driverStints = strategyData
                             .filter((s) => s.driver_code === driverCode)
                             .sort((a, b) => a.stint_start - b.stint_start);
@@ -2121,7 +2154,7 @@ export default function RaceDetailPage() {
               </h2>
               {/* Driver Selector Chips */}
               <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 gap-1.5">
-                {[...new Map(race.results.map((d: any) => [d.driver_code, d])).values()].map((driver: any) => (
+                {driverStyleRows.map((driver) => (
                   <button
                     key={driver.driver_code}
                     onClick={() => {
@@ -2140,6 +2173,9 @@ export default function RaceDetailPage() {
                       borderColor: selectedDriversForLaps.includes(driver.driver_code)
                         ? driverColors[driver.driver_code] || "#999"
                         : undefined,
+                      borderStyle: driverStyles[driver.driver_code]?.lineStyle === "dotted"
+                        ? "dashed"
+                        : "solid",
                       color: selectedDriversForLaps.includes(driver.driver_code)
                         ? driverColors[driver.driver_code] || "#fff"
                         : undefined,
@@ -2200,13 +2236,44 @@ export default function RaceDetailPage() {
                           "Lap Time",
                         ]}
                       />
-                      <Legend />
+                      <Legend
+                        content={() => (
+                          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 pt-1">
+                            {selectedDriversForLaps.map((driverCode) => {
+                              const color = driverColors[driverCode] || "#999";
+                              const dash = getDriverDash(driverCode);
+                              return (
+                                <span
+                                  key={driverCode}
+                                  className="inline-flex items-center gap-1 text-[11px] font-mono"
+                                  style={{ color }}
+                                >
+                                  <svg width="22" height="6" viewBox="0 0 22 6" aria-hidden="true">
+                                    <line
+                                      x1="1"
+                                      y1="3"
+                                      x2="21"
+                                      y2="3"
+                                      stroke={color}
+                                      strokeWidth="2.2"
+                                      strokeLinecap="round"
+                                      strokeDasharray={dash}
+                                    />
+                                  </svg>
+                                  {driverCode}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        )}
+                      />
                       {selectedDriversForLaps.map((driverCode) => (
                         <Line
                           key={driverCode}
                           type="monotone"
                           dataKey={driverCode}
                           stroke={driverColors[driverCode] || "#999"}
+                            strokeDasharray={getDriverDash(driverCode)}
                           dot={false}
                           strokeWidth={2}
                           connectNulls
@@ -2464,9 +2531,11 @@ export default function RaceDetailPage() {
                         <Legend />
                         <Line data={telemetryData1} type="monotone" dataKey="speed"
                           stroke={driverColors[telemetryDriver1] || "#00D9FF"} name={telemetryDriver1}
+                          strokeDasharray={getDriverDash(telemetryDriver1)}
                           dot={false} strokeWidth={2} isAnimationActive={false} />
                         <Line data={telemetryData2} type="monotone" dataKey="speed"
                           stroke={driverColors[telemetryDriver2] || "#FF1E1E"} name={telemetryDriver2}
+                          strokeDasharray={getDriverDash(telemetryDriver2)}
                           dot={false} strokeWidth={2} isAnimationActive={false} />
                       </LineChart>
                     </ResponsiveContainer>
@@ -2516,6 +2585,7 @@ export default function RaceDetailPage() {
                           dataKey="throttle"
                           stroke={driverColors[telemetryDriver1] || "#00D9FF"}
                           name={telemetryDriver1}
+                          strokeDasharray={getDriverDash(telemetryDriver1)}
                           dot={false}
                           strokeWidth={2}
                           isAnimationActive={false}
@@ -2526,6 +2596,7 @@ export default function RaceDetailPage() {
                           dataKey="throttle"
                           stroke={driverColors[telemetryDriver2] || "#FF1E1E"}
                           name={telemetryDriver2}
+                          strokeDasharray={getDriverDash(telemetryDriver2)}
                           dot={false}
                           strokeWidth={2}
                           isAnimationActive={false}
@@ -2575,6 +2646,7 @@ export default function RaceDetailPage() {
                           dataKey="brakeValue"
                           stroke={driverColors[telemetryDriver1] || "#00D9FF"}
                           name={telemetryDriver1}
+                          strokeDasharray={getDriverDash(telemetryDriver1)}
                           dot={false}
                           strokeWidth={2}
                           isAnimationActive={false}
@@ -2588,6 +2660,7 @@ export default function RaceDetailPage() {
                           dataKey="brakeValue"
                           stroke={driverColors[telemetryDriver2] || "#FF1E1E"}
                           name={telemetryDriver2}
+                          strokeDasharray={getDriverDash(telemetryDriver2)}
                           dot={false}
                           strokeWidth={2}
                           isAnimationActive={false}
@@ -2630,6 +2703,7 @@ export default function RaceDetailPage() {
                           dataKey="gear"
                           stroke={driverColors[telemetryDriver1] || "#00D9FF"}
                           name={telemetryDriver1}
+                          strokeDasharray={getDriverDash(telemetryDriver1)}
                           dot={false}
                           strokeWidth={2}
                           isAnimationActive={false}
@@ -2640,6 +2714,7 @@ export default function RaceDetailPage() {
                           dataKey="gear"
                           stroke={driverColors[telemetryDriver2] || "#FF1E1E"}
                           name={telemetryDriver2}
+                          strokeDasharray={getDriverDash(telemetryDriver2)}
                           dot={false}
                           strokeWidth={2}
                           isAnimationActive={false}

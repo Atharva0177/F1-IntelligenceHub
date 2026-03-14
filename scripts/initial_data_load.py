@@ -248,6 +248,73 @@ def extract_circuit_svg_from_session(session, event_name: str) -> bool:
         return False
 
 
+# FastF1 schedule session name -> (session identifiers to try, DB session label)
+_SESSION_PLAN_MAP = {
+    'Practice 1': (['FP1'], 'FP1'),
+    'Practice 2': (['FP2'], 'FP2'),
+    'Practice 3': (['FP3'], 'FP3'),
+    'Sprint Qualifying': (['SQ', 'SS'], 'Sprint Qualifying'),
+    'Sprint Shootout': (['SQ', 'SS'], 'Sprint Shootout'),
+    'Sprint': (['S'], 'Sprint'),
+    'Qualifying': (['Q'], 'Qualifying'),
+    'Race': (['R'], 'Race'),
+}
+
+
+def _build_session_plan_from_event(event_row) -> list[tuple[list[str], str]]:
+    """Build an ordered session plan from FastF1 EventSchedule Session1..Session5."""
+    plan: list[tuple[list[str], str]] = []
+
+    for idx in range(1, 6):
+        raw_name = event_row.get(f'Session{idx}')
+        if raw_name is None:
+            continue
+
+        session_name = str(raw_name).strip()
+        if not session_name or session_name.lower() == 'nan':
+            continue
+
+        mapped = _SESSION_PLAN_MAP.get(session_name)
+        if mapped is None:
+            logger.info(f"  Skipping unsupported session type from schedule: {session_name}")
+            continue
+
+        identifiers, db_label = mapped
+        if any(existing_label == db_label for _, existing_label in plan):
+            continue
+        plan.append((identifiers, db_label))
+
+    return plan
+
+
+def _event_first_session_date(event_row):
+    """Return the earliest known session date for an event (or EventDate fallback)."""
+    candidate_cols = [f'Session{i}Date' for i in range(1, 6)] + [f'Session{i}DateUtc' for i in range(1, 6)]
+    dates = []
+
+    for col in candidate_cols:
+        value = event_row.get(col)
+        if value is None:
+            continue
+        try:
+            if pd.notna(value):
+                dates.append(pd.to_datetime(value).date())
+        except Exception:
+            continue
+
+    if dates:
+        return min(dates)
+
+    try:
+        event_date = event_row.get('EventDate')
+        if pd.notna(event_date):
+            return pd.to_datetime(event_date).date()
+    except Exception:
+        pass
+
+    return None
+
+
 # ── Main data loading ──────────────────────────────────────────────────────────
 
 def load_season(year, from_round: int = 1, to_round: int = None, results_only: bool = False, skip_circuits: bool = False, telemetry_only: bool = False):
@@ -345,27 +412,41 @@ def load_season(year, from_round: int = 1, to_round: int = None, results_only: b
                         logger.info(f"  No existing Race session for Round {round_num} ({event_name}), skipping (telemetry-only mode)")
                         continue
 
-                # Define all possible session types to load
-                # In telemetry_only mode, only the Race session has telemetry
+                # Decide which sessions to load for this event.
+                # For full loads, follow FastF1 Session1..Session5 order so sprint
+                # weekends load as FP1 -> Sprint Qualifying -> Sprint -> Qualifying -> Race.
                 if telemetry_only:
-                    session_types_to_load = [('R', 'Race')]
-                # In results_only mode, only load the Race session
+                    session_types_to_load = [(['R'], 'Race')]
                 elif results_only:
-                    session_types_to_load = [('S', 'Sprint'), ('R', 'Race')]
+                    session_types_to_load = [(['S'], 'Sprint'), (['R'], 'Race')]
                 else:
-                    session_types_to_load = [
-                    ('FP1', 'FP1'),
-                    ('FP2', 'FP2'),
-                    ('FP3', 'FP3'),
-                    ('Q', 'Qualifying'),
-                    ('S', 'Sprint'),
-                    ('R', 'Race'),
-                ]
-                for session_identifier, session_name in session_types_to_load:
+                    session_types_to_load = _build_session_plan_from_event(event)
+                    if not session_types_to_load:
+                        # Fallback for unexpected schedule payloads.
+                        session_types_to_load = [
+                            (['FP1'], 'FP1'),
+                            (['FP2'], 'FP2'),
+                            (['FP3'], 'FP3'),
+                            (['SQ', 'SS'], 'Sprint Qualifying'),
+                            (['S'], 'Sprint'),
+                            (['Q'], 'Qualifying'),
+                            (['R'], 'Race'),
+                        ]
+
+                for session_identifiers, session_name in session_types_to_load:
                     try:
                         logger.info(f"  Loading {session_name} session...")
-                        session = f1_client.get_session(year, round_num, session_identifier, results_only=results_only and not telemetry_only)
-                        
+                        session = None
+                        for session_identifier in session_identifiers:
+                            session = f1_client.get_session(
+                                year,
+                                round_num,
+                                session_identifier,
+                                results_only=results_only and not telemetry_only,
+                            )
+                            if session is not None:
+                                break
+
                         if session is None:
                             logger.info(f"    ℹ️  {session_name} session not available")
                             continue
@@ -570,8 +651,8 @@ def load_season(year, from_round: int = 1, to_round: int = None, results_only: b
 
 def sync_season(year: int):
     """
-    Inspect the DB state for every completed round (event_date ≤ today) and
-    load only what is missing.  Three states are recognised per round:
+    Inspect the DB state for every started round (first session date ≤ today)
+    and load only what is missing. Three states are recognised per round:
 
       FULL       – race has no results or no lap times → full load
       TELEM_ONLY – results + laps present but no telemetry → telemetry backfill
@@ -606,13 +687,15 @@ def sync_season(year: int):
             continue
         event_name = event['EventName']
 
-        try:
-            event_date = pd.to_datetime(event['EventDate']).date()
-        except Exception:
-            event_date = None
+        first_session_date = _event_first_session_date(event)
+        if first_session_date is None:
+            logger.info(f"  Round {round_num:>2}: {event_name} — no schedule date, skipping")
+            continue
 
-        if event_date is None or event_date > today:
-            logger.info(f"  Round {round_num:>2}: {event_name} — future, skipping")
+        if first_session_date > today:
+            logger.info(
+                f"  Round {round_num:>2}: {event_name} — weekend starts on {first_session_date}, skipping"
+            )
             continue
 
         existing_race = db.query(RaceModel).filter(

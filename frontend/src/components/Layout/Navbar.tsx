@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
+import NextSessionCountdown from './NextSessionCountdown';
 
 const navLinks = [
   { href: '/',             label: 'Dashboard' },
@@ -80,11 +81,8 @@ const Navbar = () => {
             ))}
           </div>
 
-          {/* Live data badge */}
-          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700 text-xs text-gray-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-track-green animate-pulse" />
-            Live Data
-          </div>
+          {/* Next session countdown */}
+          <NextSessionCountdown />
 
           {/* Mobile menu toggle */}
           <button
