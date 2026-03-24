@@ -56,7 +56,6 @@ const FEATURE_CARDS = [
     cta: "Explore Races",
     desc: "Lap times, pit strategies, race progression — every Grand Prix in detail.",
     color: "#e10600",
-    gradFrom: "#1c0500",
     icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13 10V3L4 14h7v7l9-11h-7z" />,
   },
   {
@@ -65,7 +64,6 @@ const FEATURE_CARDS = [
     cta: "View Drivers",
     desc: "Career stats, head-to-head comparisons, and championship journeys.",
     color: "#00b8ff",
-    gradFrom: "#001018",
     icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />,
   },
   {
@@ -74,7 +72,6 @@ const FEATURE_CARDS = [
     cta: "Open Dashboard",
     desc: "Team performance, sector analysis, and tire strategy insights.",
     color: "#a855f7",
-    gradFrom: "#0e001a",
     icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
   },
 ];
@@ -152,8 +149,8 @@ export default function Home() {
     <div className={`space-y-10 pb-16 ${pageEntered ? "page-enter" : "opacity-0"}`}>
 
       {/* ════════════════════════════ HERO ════════════════════════════ */}
-      <section className="relative overflow-hidden rounded-3xl border border-carbon-800 min-h-[320px] sm:min-h-[400px] md:min-h-[440px] flex flex-col justify-center"
-        style={{ background: "linear-gradient(160deg,#080810 0%,#07070a 100%)" }}>
+      <section className="relative overflow-hidden rounded-3xl border border-carbon-800 min-h-[320px] sm:min-h-[400px] md:min-h-[440px] flex flex-col justify-center theme-hero-surface"
+        style={{ background: "var(--theme-hero-bg)" }}>
 
         {/* Subtle grid */}
         <div className="absolute inset-0 opacity-[0.028]"
@@ -221,7 +218,7 @@ export default function Home() {
           <div className={`w-full md:w-[22rem] shrink-0 transition-all duration-700 ${heroReady ? "opacity-100 translate-x-0" : "opacity-0 translate-x-8"}`}
             style={{ transitionDelay: "255ms" }}>
             <div className="relative overflow-hidden rounded-2xl border border-white/[0.07] h-full"
-              style={{ background: "linear-gradient(158deg,#101020 0%,#07070e 100%)", boxShadow: "0 0 70px rgba(225,6,0,0.07), inset 0 1px 0 rgba(255,255,255,0.05)" }}>
+              style={{ background: "var(--theme-hero-card-bg)", boxShadow: "var(--theme-hero-card-shadow)" }}>
               <div className="h-px inset-x-0 bg-gradient-to-r from-transparent via-racing-red-500/60 to-transparent" />
               <div className="p-7 flex flex-col gap-6">
 
@@ -326,7 +323,7 @@ export default function Home() {
       <section ref={cardsSection.ref}>
         <h2 className="section-title mb-6">Explore the Platform</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {FEATURE_CARDS.map(({ href, label, desc, cta, color, gradFrom, icon }, i) => (
+          {FEATURE_CARDS.map(({ href, label, desc, cta, color, icon }, i) => (
             <div key={href}
               style={{
                 opacity: cardsSection.visible ? 1 : 0,
@@ -335,7 +332,7 @@ export default function Home() {
               }}>
               <Link href={href}
                 className="group relative block overflow-hidden rounded-2xl card-shine border border-white/[0.07] hover:border-white/[0.15] hover:-translate-y-1.5 transition-[transform,border-color,box-shadow] duration-300 h-full"
-                style={{ background: `linear-gradient(160deg, ${gradFrom} 0%, #0d0d0d 100%)` }}
+                style={{ background: `linear-gradient(160deg, ${color}18 0%, var(--theme-feature-card-end) 100%)` }}
                 onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 24px 60px -12px ${color}28, 0 0 0 1px ${color}18`)}
                 onMouseLeave={e => (e.currentTarget.style.boxShadow = "none")}>
 
@@ -418,7 +415,7 @@ export default function Home() {
 
       {/* ════════════════════════════ TELEMETRY ════════════════════════ */}
       <section ref={telSection.ref} className="rounded-3xl border border-carbon-800 overflow-hidden"
-        style={{ background: "linear-gradient(160deg,#07070a 0%,#050508 100%)" }}>
+        style={{ background: "var(--theme-telemetry-bg)" }}>
         <div className="flex flex-col lg:flex-row">
 
           {/* Text side */}

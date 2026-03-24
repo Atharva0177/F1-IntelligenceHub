@@ -1003,6 +1003,11 @@ export default function RaceDetailPage() {
                             : (!isWinner ? (formatGapToLeader(result) ?? '—') : '—'))
                         : null;
 
+                      // Always show a compact mobile line for race rows, even when data is missing.
+                      const mobileRaceMeta = isRace
+                        ? (isWinner ? `Time ${raceTimeDisplay ?? '—'}` : `Gap ${raceTimeDisplay ?? '—'}`)
+                        : null;
+
                       return (
                         <tr key={result.driver_code || index}
                           className="border-b border-white/[0.04] group transition-colors hover:bg-white/[0.03]">
@@ -1039,6 +1044,18 @@ export default function RaceDetailPage() {
                                       </span>
                                     )}
                                     {/* Show gap for non-race on mobile */}
+                                  </div>
+                                )}
+                                {/* Time / Gap inline on mobile for race */}
+                                {isRace && (
+                                  <div className="sm:hidden mt-0.5">
+                                    <span className={`text-[9px] font-mono ${
+                                      isWinner
+                                        ? 'text-emerald-400'
+                                        : ((raceTimeDisplay ?? '').includes('Lap') ? 'text-amber-400/90' : 'text-gray-500')
+                                    }`}>
+                                      {mobileRaceMeta}
+                                    </span>
                                   </div>
                                 )}
                                 {/* Gap inline on mobile for non-race */}

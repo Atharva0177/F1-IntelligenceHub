@@ -181,7 +181,7 @@ export default function DriverDetailPage() {
           { label: 'DNFs',           value: results.filter(r => r.position <= 0).length,                   color: '#E8002D' },
         ].map(({ label, value, color }) => (
           <div key={label} className="rounded-xl p-4 relative overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${color}10, #080810)`, border: `1px solid ${color}20` }}>
+            style={{ background: `linear-gradient(135deg, ${color}10, var(--theme-surface-0))`, border: `1px solid ${color}20` }}>
             <div className="text-[9px] uppercase tracking-widest text-gray-500 font-semibold mb-1">{label}</div>
             <div className="text-2xl font-black text-white">{value}</div>
           </div>
@@ -189,8 +189,8 @@ export default function DriverDetailPage() {
       </div>
 
       {/* ── Race Results Table ── */}
-      <div className="rounded-2xl overflow-hidden" style={{ background: '#080810', border: '1px solid #16162a' }}>
-        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #16162a' }}>
+      <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--theme-surface-0)', border: '1px solid var(--theme-border-strong)' }}>
+        <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--theme-border-strong)' }}>
           <h2 className="font-display font-bold text-white">{selectedSeason} Race Results</h2>
           <span className="text-[11px] text-gray-500 uppercase tracking-wider">{results.length} races</span>
         </div>
@@ -203,7 +203,7 @@ export default function DriverDetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-[9px] text-gray-600 uppercase tracking-widest" style={{ borderBottom: '1px solid #16162a' }}>
+                <tr className="text-[9px] text-gray-600 uppercase tracking-widest" style={{ borderBottom: '1px solid var(--theme-border-strong)' }}>
                   <th className="pl-5 pr-2 py-3 text-left w-6">#</th>
                   <th className="px-3 py-3 text-left">Race</th>
                   <th className="px-3 py-3 text-center hidden sm:table-cell">Date</th>
@@ -226,7 +226,7 @@ export default function DriverDetailPage() {
                   return (
                     <tr key={i}
                       className="transition-colors"
-                      style={{ borderBottom: '1px solid #0f0f1e' }}
+                      style={{ borderBottom: '1px solid var(--theme-border-soft)' }}
                       onMouseEnter={e => (e.currentTarget.style.background = `${tc}0a`)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                       <td className="pl-5 pr-2 py-3 text-gray-600 text-[11px] tabular-nums">{i + 1}</td>

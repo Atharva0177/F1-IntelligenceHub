@@ -142,7 +142,7 @@ export default function StandingsPage() {
       </section>
 
       {/* Segmented control */}
-      <div className="flex bg-[#0d0d16] border border-carbon-800 rounded-xl p-1 w-fit">
+      <div className="flex rounded-xl p-1 w-fit" style={{ background: 'var(--theme-surface-1)', border: '1px solid var(--theme-border-strong)' }}>
         {(['drivers', 'constructors'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-7 py-2 rounded-lg text-sm font-bold capitalize transition-all ${
@@ -174,7 +174,7 @@ export default function StandingsPage() {
               const carImgUrl = !isDrivers ? getCarImage((item as ConstructorStanding).team_name, season) : undefined;
               return (
                 <div key={pos} className="flex-1 relative rounded-2xl overflow-hidden flex flex-col"
-                  style={{ height: h, background: `linear-gradient(155deg, ${tc}22 0%, #07070f 65%)`, border: `1px solid ${tc}50`, boxShadow: `0 8px 48px ${tc}35`, alignSelf: 'flex-end' }}>
+                  style={{ height: h, background: `linear-gradient(155deg, ${tc}22 0%, var(--theme-surface-0) 65%)`, border: `1px solid ${tc}50`, boxShadow: `0 8px 48px ${tc}35`, alignSelf: 'flex-end' }}>
                   {/* metallic top stripe */}
                   <div className="h-[2px] flex-shrink-0" style={{ background: `linear-gradient(90deg, transparent, ${metalC}, transparent)` }} />
                   {/* ambient glow */}
@@ -193,7 +193,7 @@ export default function StandingsPage() {
                   )}
                   {/* bottom scrim so text stays readable */}
                   <div className="absolute inset-0 pointer-events-none"
-                    style={{ background: 'linear-gradient(to top, rgba(7,7,15,1) 0%, rgba(7,7,15,0.95) 28%, rgba(7,7,15,0.6) 48%, transparent 70%)' }} />
+                    style={{ background: 'linear-gradient(to top, var(--theme-scrim-start) 0%, var(--theme-scrim-mid) 28%, var(--theme-scrim-fade) 48%, transparent 70%)' }} />
                   {/* watermark pos */}
                   <div className="absolute right-3 bottom-2 font-black leading-none pointer-events-none" style={{ color: metalC, opacity: 0.07, fontSize: 96 }}>P{pos}</div>
                   {/* points badge */}
@@ -226,7 +226,7 @@ export default function StandingsPage() {
               { label: 'Teams Competing',      value: String(constructors.length),                      sub: `${season} season`,                       color: '#60A5FA' },
             ]).map(({ label, value, sub, color }) => (
               <div key={label} className="relative rounded-xl p-4 overflow-hidden"
-                style={{ background: `linear-gradient(135deg, ${color}12, #090910)`, border: `1px solid ${color}22` }}>
+                style={{ background: `linear-gradient(135deg, ${color}12, var(--theme-surface-0))`, border: `1px solid ${color}22` }}>
                 <div className="text-[9px] text-gray-500 uppercase tracking-widest font-semibold mb-1">{label}</div>
                 <div className="text-xl font-black text-white">{value}</div>
                 <div className="text-xs mt-0.5 font-semibold" style={{ color }}>{sub}</div>
@@ -235,8 +235,8 @@ export default function StandingsPage() {
           </div>
 
           {/* ── Table ── */}
-          <div className="rounded-2xl overflow-hidden" style={{ background: '#080810', border: '1px solid #16162a' }}>
-              <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #16162a' }}>
+            <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--theme-surface-0)', border: '1px solid var(--theme-border-strong)' }}>
+              <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid var(--theme-border-strong)' }}>
                 <h2 className="font-display font-bold text-white">{isDrivers ? 'Driver' : 'Constructor'} Championship</h2>
                 <span className="text-[11px] text-gray-500 uppercase tracking-wider">
                   {isDrivers ? `${drivers.length} drivers` : `${constructors.length} teams`}
@@ -245,7 +245,7 @@ export default function StandingsPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-[9px] text-gray-600 uppercase tracking-widest" style={{ borderBottom: '1px solid #16162a' }}>
+                    <tr className="text-[9px] text-gray-600 uppercase tracking-widest" style={{ borderBottom: '1px solid var(--theme-border-strong)' }}>
                       <th className="pl-4 pr-2 py-3 text-left w-10">Pos</th>
                       <th className="px-2 py-3 text-left">{isDrivers ? 'Driver' : 'Constructor'}</th>
                       <th className="px-2 py-3 text-left hidden md:table-cell">{isDrivers ? 'Team' : 'Drivers'}</th>
@@ -267,7 +267,7 @@ export default function StandingsPage() {
                       return (
                         <tr key={rowId}
                           className="group transition-colors cursor-default"
-                          style={{ borderBottom: '1px solid #12121e' }}
+                          style={{ borderBottom: '1px solid var(--theme-border-soft)' }}
                           onMouseEnter={e => (e.currentTarget.style.background = `${tc}0e`)}
                           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                           {/* Position */}

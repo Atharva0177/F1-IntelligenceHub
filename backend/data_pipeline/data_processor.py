@@ -152,19 +152,11 @@ class DataProcessor:
         processed_results = []
         
         for _, result in results_df.iterrows():
-            race_time = None
-            if pd.notna(result.get('Time')):
-                time_val = result['Time']
-                if hasattr(time_val, 'total_seconds'):
-                    race_time = time_val.total_seconds()
+            race_time = DataProcessor._duration_to_seconds(result.get('Time'))
             
             # Process fastest lap data
-            fastest_lap_time = None
+            fastest_lap_time = DataProcessor._duration_to_seconds(result.get('FastestLapTime'))
             fastest_lap_number = None
-            if 'FastestLapTime' in result and pd.notna(result['FastestLapTime']):
-                fl_time = result['FastestLapTime']
-                if hasattr(fl_time, 'total_seconds'):
-                    fastest_lap_time = fl_time.total_seconds()
             
             if 'FastestLap' in result and pd.notna(result['FastestLap']):
                 fastest_lap_number = int(result['FastestLap'])
@@ -203,6 +195,48 @@ class DataProcessor:
             return None
         if hasattr(td, 'total_seconds'):
             return td.total_seconds()
+        return None
+
+    @staticmethod
+    def _duration_to_seconds(value) -> Optional[float]:
+        """
+        Convert duration-like values to seconds.
+
+        Supports timedelta-like objects, numeric seconds, and strings such as
+        "1:32:15.607" or "+5.123".
+        """
+        if value is None or pd.isna(value):
+            return None
+
+        if hasattr(value, 'total_seconds'):
+            try:
+                return float(value.total_seconds())
+            except (TypeError, ValueError):
+                return None
+
+        if isinstance(value, (int, float, np.integer, np.floating)):
+            return float(value)
+
+        if isinstance(value, str):
+            text = value.strip()
+            if not text:
+                return None
+            if text.lower() in {'nan', 'nat', 'none'}:
+                return None
+
+            # Common race status strings are not parseable as durations.
+            if 'lap' in text.lower() or text.lower() in {'dnf', 'dns', 'dsq'}:
+                return None
+
+            td = pd.to_timedelta(text, errors='coerce')
+            if pd.notna(td):
+                return float(td.total_seconds())
+
+            try:
+                return float(text)
+            except (TypeError, ValueError):
+                return None
+
         return None
     
     @staticmethod

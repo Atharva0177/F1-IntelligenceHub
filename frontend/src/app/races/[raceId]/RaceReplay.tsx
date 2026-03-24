@@ -662,7 +662,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
   /* ── Empty state ──────────────────────────────────────────────────── */
   if (positionData.length === 0) {
     return (
-      <div className="bg-[#050508] rounded-xl border border-carbon-700 p-16 text-center text-gray-600 font-mono">
+      <div className="theme-surface rounded-xl border border-carbon-700 p-16 text-center text-gray-600 font-mono">
         No lap time data available for replay.
       </div>
     );
@@ -674,7 +674,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
 
   /* ── Render ───────────────────────────────────────────────────────── */
   return (
-    <div className="bg-[#050508] rounded-xl border border-gray-900 overflow-hidden font-mono select-none">
+    <div className="theme-surface rounded-xl border border-gray-900 overflow-hidden font-mono select-none">
 
       {/* ── TOP INFO BAR ── */}
       <div className="bg-black px-3 sm:px-5 py-2 sm:py-2.5 flex items-center gap-3 sm:gap-6 border-b border-gray-900">
