@@ -435,6 +435,9 @@ def load_season(year, from_round: int = 1, to_round: int = None, results_only: b
 
                 for session_identifiers, session_name in session_types_to_load:
                     try:
+                        # Ensure each session starts with a clean transaction.
+                        db_ops.db.rollback()
+
                         logger.info(f"  Loading {session_name} session...")
                         session = None
                         for session_identifier in session_identifiers:
@@ -559,7 +562,10 @@ def load_season(year, from_round: int = 1, to_round: int = None, results_only: b
                                 for driver_code in driver_list:
                                     try:
                                         logger.info(f"      Loading telemetry for {driver_code}...")
-                                        driver_laps = session.laps.pick_driver(driver_code)
+                                        if hasattr(session.laps, 'pick_drivers'):
+                                            driver_laps = session.laps.pick_drivers(driver_code)
+                                        else:
+                                            driver_laps = session.laps.pick_driver(driver_code)
                                         if len(driver_laps) == 0:
                                             logger.warning(f"      No laps found for {driver_code}")
                                             continue
@@ -620,6 +626,7 @@ def load_season(year, from_round: int = 1, to_round: int = None, results_only: b
                     
                     except Exception as session_error:
                         logger.error(f"  ❌ Error loading {session_name} session: {session_error}")
+                        db_ops.db.rollback()
                         continue
                 
                 logger.info(f"✅ Completed Round {round_num}: {event_name}\n")
@@ -627,11 +634,15 @@ def load_season(year, from_round: int = 1, to_round: int = None, results_only: b
             except Exception as e:
                 logger.error(f"❌ Error processing Round {round_num}: {e}")
                 logger.exception(e)
+                db_ops.db.rollback()
                 continue
         
         logger.info("=" * 80)
         logger.info(f"✅ Data loading for {year} completed successfully!")
         logger.info("=" * 80)
+
+        # Make sure summary reads run outside any failed transaction state.
+        db_ops.db.rollback()
         
         # Summary statistics
         logger.info("\n📊 Summary Statistics:")

@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS results (
     race_id INTEGER NOT NULL REFERENCES races(id),
     driver_id INTEGER NOT NULL REFERENCES drivers(id),
     team_id INTEGER NOT NULL REFERENCES teams(id),
+    is_sprint BOOLEAN NOT NULL DEFAULT FALSE,
     position INTEGER,
     grid_position INTEGER,
     points FLOAT DEFAULT 0.0,
@@ -154,6 +155,11 @@ CREATE TABLE IF NOT EXISTS results (
 CREATE INDEX idx_results_race ON results(race_id);
 CREATE INDEX idx_results_driver ON results(driver_id);
 CREATE INDEX idx_results_position ON results(position);
+CREATE INDEX IF NOT EXISTS idx_results_race_driver_sprint ON results(race_id, driver_id, is_sprint);
+
+-- Backward-compatible patch for databases created before is_sprint existed
+ALTER TABLE IF EXISTS results
+ADD COLUMN IF NOT EXISTS is_sprint BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Qualifying results table
 CREATE TABLE IF NOT EXISTS qualifying (

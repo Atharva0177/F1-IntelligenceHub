@@ -1,4 +1,4 @@
-﻿# F1 Intelligence Hub — New Device Setup
+# F1 Intelligence Hub — New Device Setup
 # Run once after cloning: .\setup.ps1
 # Requires: Docker Desktop (nothing else — no Python, conda, or Node needed)
 
@@ -71,6 +71,9 @@ if (-not (Test-Path $backupFile)) {
     Write-Host ""
     Write-Host "  Load data with (runs entirely inside Docker):" -ForegroundColor Yellow
     Write-Host "  docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  *NOTE: The F1 API has a rate limit of 500 calls/hour. If loading past seasons," -ForegroundColor Gray
+    Write-Host "         load them 1-2 years at a time or use the --results-only flag.*" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Optional enrichment:" -ForegroundColor DarkGray
     Write-Host "    Race weather : docker compose run --rm loader python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
@@ -271,6 +274,8 @@ Write-Host "  API Docs : http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Useful commands:" -ForegroundColor DarkGray
   Write-Host "    Load data (2026) : docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor DarkGray
+  Write-Host "    Fast race update : docker compose run --rm loader python scripts/initial_data_load.py 2024 2025 --results-only" -ForegroundColor DarkGray
+  Write-Host "      (Quickly fetches missing race times/results without downloading gigabytes of telemetry/laps)" -ForegroundColor DarkGray
   Write-Host "    Back up DB       : .\scripts\backup.ps1" -ForegroundColor DarkGray
   Write-Host "    Restore DB       : .\scripts\restore.ps1" -ForegroundColor DarkGray
   Write-Host "    Race weather     : docker compose run --rm loader python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray

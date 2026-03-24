@@ -1,7 +1,7 @@
 import os
 from typing import Optional
 from pydantic_settings import BaseSettings
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -73,6 +73,19 @@ def init_db():
     Initialize database tables
     """
     Base.metadata.create_all(bind=engine)
+
+    # Backward-compatible schema patch for existing databases that were
+    # created before sprint and race results were split in the same table.
+    with engine.begin() as conn:
+        conn.execute(text("""
+            ALTER TABLE IF EXISTS results
+            ADD COLUMN IF NOT EXISTS is_sprint BOOLEAN NOT NULL DEFAULT FALSE
+        """))
+        conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_results_race_driver_sprint
+            ON results(race_id, driver_id, is_sprint)
+        """))
+
     print("Database tables created successfully")
 
 
