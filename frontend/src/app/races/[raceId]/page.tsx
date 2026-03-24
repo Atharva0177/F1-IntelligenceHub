@@ -198,16 +198,10 @@ export default function RaceDetailPage() {
     setTelemetryDriver2("");
   }, [selectedSessionId]);
 
-  // Fetch position data (lap times for the selected session) when Positions/Dominance/Telemetry tab is active
+  // Fetch position data (lap times for the selected session) always, since Results tab might need it for fallback
   useEffect(() => {
     const fetchPositions = async () => {
-      if (
-        (activeTab !== "positions" && activeTab !== "dominance" && activeTab !== "telemetry" && activeTab !== "replay") ||
-        !selectedSessionId ||
-        loadingPositions ||
-        positionData.length > 0
-      )
-        return;
+      if (!selectedSessionId || loadingPositions || positionData.length > 0) return;
 
       setLoadingPositions(true);
       try {
