@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.next
+out
+.env*
+.git
+.DS_Store
+coverage
+build
+dist
+fastf1_cache/
+backups/
