@@ -29,10 +29,10 @@ if (-not (Test-Path ".env")) {
         Copy-Item ".env.example" ".env"
         Write-Host "  [2/6] .env created from .env.example" -ForegroundColor Green
     } else {
-        Write-Host "  [2/6] WARNING: no .env or .env.example found — continuing" -ForegroundColor Yellow
+        Write-Host "  [2/6] WARNING: no .env or .env.example found - continuing" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "  [2/6] .env already exists — skipped" -ForegroundColor DarkGray
+    Write-Host "  [2/6] .env already exists - skipped" -ForegroundColor DarkGray
 }
 
 # ── 3. Directories ─────────────────────────────────────────────────────────────
@@ -71,9 +71,6 @@ if (-not (Test-Path $backupFile)) {
     Write-Host ""
     Write-Host "  Load data with (runs entirely inside Docker):" -ForegroundColor Yellow
     Write-Host "  docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor White
-    Write-Host ""
-    Write-Host "  *NOTE: The F1 API has a rate limit of 500 calls/hour. If loading past seasons," -ForegroundColor Gray
-    Write-Host "         load them 1-2 years at a time or use the --results-only flag.*" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Optional enrichment:" -ForegroundColor DarkGray
     Write-Host "    Race weather : docker compose run --rm loader python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
@@ -134,16 +131,17 @@ if (-not (Test-Path $backupFile)) {
         if ($pvAvailable) {
             docker exec -it f1_postgres sh -c "pv -petar /tmp/f1_dump.sql | psql -U f1user -d f1_intelligence_hub -q"
         } else {
-            Write-Host "        (pv not available — showing live row counts)" -ForegroundColor DarkGray
+            Write-Host "        (pv not available - showing live row counts)" -ForegroundColor DarkGray
             $job = Start-Job -ScriptBlock {
                 docker exec f1_postgres psql -U f1user -d f1_intelligence_hub -q -f /tmp/f1_dump.sql 2>&1
             }
-            $spin = @('|','/','-','\'); $spinIdx = 0
+            $spin = @('|', '/', '-', [char]92)
+            $spinIdx = 0
+            $liveCountSql = "SELECT relname || '=' || n_live_tup FROM pg_stat_user_tables WHERE n_live_tup > 0 ORDER BY n_live_tup DESC LIMIT 5;"
             while ($job.State -eq 'Running') {
                 Start-Sleep -Seconds 3
                 $s = $spin[$spinIdx++ % 4]
-                $r = docker exec f1_postgres psql -U f1user -d f1_intelligence_hub -t -q -c `
-                     "SELECT relname||'='||n_live_tup FROM pg_stat_user_tables WHERE n_live_tup>0 ORDER BY n_live_tup DESC LIMIT 5;" 2>$null
+                $r = docker exec f1_postgres psql -U f1user -d f1_intelligence_hub -t -q -c $liveCountSql 2>$null
                 $summary = ($r | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }) -join '  '
                 Write-Host "        $s [$($sw.Elapsed.ToString('mm\:ss'))]  $summary" -ForegroundColor DarkGray
             }
@@ -274,8 +272,6 @@ Write-Host "  API Docs : http://localhost:8000/docs" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Useful commands:" -ForegroundColor DarkGray
   Write-Host "    Load data (2026) : docker compose run --rm loader python scripts/initial_data_load.py 2026 --sync" -ForegroundColor DarkGray
-  Write-Host "    Fast race update : docker compose run --rm loader python scripts/initial_data_load.py 2024 2025 --results-only" -ForegroundColor DarkGray
-  Write-Host "      (Quickly fetches missing race times/results without downloading gigabytes of telemetry/laps)" -ForegroundColor DarkGray
   Write-Host "    Back up DB       : .\scripts\backup.ps1" -ForegroundColor DarkGray
   Write-Host "    Restore DB       : .\scripts\restore.ps1" -ForegroundColor DarkGray
   Write-Host "    Race weather     : docker compose run --rm loader python scripts/download_fastf1_weather.py --start-year 2020" -ForegroundColor DarkGray
