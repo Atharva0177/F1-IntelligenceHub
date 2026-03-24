@@ -996,38 +996,12 @@ export default function RaceDetailPage() {
                       const isFinished = result.status === 'Finished' || result.status?.startsWith('+');
                       const posLabel = isWinner ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : pos || '-';
 
-                      // Fallback: Compute total race time for this driver if DB time is missing
-                      let driverTime = result.time;
-                      if (!driverTime && positionData.length > 0) {
-                        const laps = positionData.filter(d => d.driver_code === result.driver_code);
-                        if (laps.length > 0) {
-                          driverTime = laps.reduce((sum, lap) => sum + (lap.lap_time_seconds || 0), 0);
-                        }
-                      }
-                      
-                      // Also compute leader's total time if needed for gap calculation
-                      let leaderFallbackTime = sessionResults[0]?.time;
-                      if (!leaderFallbackTime && sessionResults[0] && positionData.length > 0) {
-                        const lLaps = positionData.filter(d => d.driver_code === sessionResults[0].driver_code);
-                        leaderFallbackTime = lLaps.reduce((sum, lap) => sum + (lap.lap_time_seconds || 0), 0);
-                      }
-
                       // Time / gap-to-leader for race
-                      let raceTimeDisplay = '—';
-                      if (isRace) {
-                        if (isWinner && driverTime) {
-                          raceTimeDisplay = formatRaceTime(driverTime);
-                        } else if (!isWinner) {
-                          // Try the standard formatGapToLeader first (if DB gave us relative time)
-                          const standardGap = formatGapToLeader(result);
-                          if (standardGap) {
-                            raceTimeDisplay = standardGap;
-                          } else if (driverTime && leaderFallbackTime && driverTime > leaderFallbackTime) {
-                            // Fallback gap computation
-                            raceTimeDisplay = `+${(driverTime - leaderFallbackTime).toFixed(3)}s`;
-                          }
-                        }
-                      }
+                      const raceTimeDisplay = isRace
+                        ? (isWinner && result.time
+                            ? formatRaceTime(result.time)
+                            : (!isWinner ? (formatGapToLeader(result) ?? '—') : '—'))
+                        : null;
 
                       return (
                         <tr key={result.driver_code || index}
