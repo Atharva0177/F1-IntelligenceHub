@@ -142,7 +142,10 @@ class FastF1Client:
             DataFrame with telemetry data
         """
         try:
-            driver_laps = session.laps.pick_driver(driver)
+            if hasattr(session.laps, 'pick_drivers'):
+                driver_laps = session.laps.pick_drivers(driver)
+            else:
+                driver_laps = session.laps.pick_driver(driver)
             
             if lap_number:
                 lap = driver_laps[driver_laps['LapNumber'] == lap_number].iloc[0]
