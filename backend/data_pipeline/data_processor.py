@@ -181,6 +181,7 @@ class DataProcessor:
                 'driver_number': int(result['DriverNumber']) if pd.notna(result.get('DriverNumber')) else None,
                 'fastest_lap_time': fastest_lap_time,
                 'fastest_lap_number': fastest_lap_number,
+                'race_time_seconds': race_time,
             }
             
             processed_results.append(processed_result)
