@@ -368,6 +368,32 @@ export default function RaceDetailPage() {
     return `${minutes}:${secs.padStart(6, "0")}`;
   };
 
+  // Format total race time for leader: e.g. 1:33:15.607
+  const formatRaceTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = (seconds % 60).toFixed(3);
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${s.padStart(6, '0')}`;
+    return `${m}:${s.padStart(6, '0')}`;
+  };
+
+  // Format gap to leader: +5.515s or derive lap gap from status
+  // FastF1 stores result.time as:
+  //   P1: total race duration (seconds)
+  //   P2+: gap to leader (seconds, already relative)
+  //   Lapped / DNF: null
+  const formatGapToLeader = (result: any) => {
+    // Lapped cars: status is "+1 Lap", "+2 Laps", "Lapped" etc.
+    const status = result.status || '';
+    const lapMatch = status.match(/^\+(\d+)\s+Lap/i);
+    if (lapMatch) return `+${lapMatch[1]} Lap${Number(lapMatch[1]) > 1 ? 's' : ''}`;
+    if (status.toLowerCase().includes('lapped')) return '+1 Lap';
+    // result.time is already gap in seconds for P2+
+    const t = result.time;
+    if (t != null && t > 0) return `+${t.toFixed(3)}s`;
+    return null;
+  };
+
   // Compute bump chart positions from lap time data
   const bumpChartData = useMemo(() => {
     if (!positionData || positionData.length === 0 || !race) return null;
@@ -948,6 +974,7 @@ export default function RaceDetailPage() {
                         <>
                           <th className="hidden sm:table-cell text-center py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-20">Grid</th>
                           <th className="hidden sm:table-cell text-center py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-16">Δ</th>
+                          <th className="hidden sm:table-cell text-right py-3 px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-32">Time</th>
                           <th className="text-left py-3 px-2 sm:px-3 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em]">Status</th>
                           <th className="text-right py-3 pl-2 sm:pl-3 pr-4 sm:pr-5 text-[10px] font-bold text-gray-600 uppercase tracking-[0.15em] w-14 sm:w-20">PTS</th>
                         </>
@@ -974,6 +1001,12 @@ export default function RaceDetailPage() {
                       const delta = isRace && gridPos > 0 && pos ? gridPos - pos : null;
                       const isFinished = result.status === 'Finished' || result.status?.startsWith('+');
                       const posLabel = isWinner ? '🥇' : pos === 2 ? '🥈' : pos === 3 ? '🥉' : pos || '-';
+                      // Time / gap-to-leader for race
+                      const raceTimeDisplay = isRace
+                        ? (isWinner && result.time
+                            ? formatRaceTime(result.time)
+                            : (!isWinner ? (formatGapToLeader(result) ?? '—') : '—'))
+                        : null;
 
                       return (
                         <tr key={result.driver_code || index}
@@ -1041,6 +1074,22 @@ export default function RaceDetailPage() {
                                     {delta > 0 ? `▲${delta}` : delta < 0 ? `▼${Math.abs(delta)}` : '—'}
                                   </span>
                                 ) : <span className="text-gray-700">—</span>}
+                              </td>
+                              {/* Time / Gap to Leader — desktop only */}
+                              <td className="hidden sm:table-cell py-3.5 px-3 text-right">
+                                {isWinner ? (
+                                  <span className="font-mono font-bold text-[12px] text-white tabular-nums">
+                                    {raceTimeDisplay}
+                                  </span>
+                                ) : (
+                                  <span className={`font-mono text-[12px] tabular-nums ${
+                                    raceTimeDisplay && raceTimeDisplay.includes('Lap')
+                                      ? 'text-amber-400/90'
+                                      : 'text-gray-400'
+                                  }`}>
+                                    {raceTimeDisplay}
+                                  </span>
+                                )}
                               </td>
                               {/* Status — compact on mobile */}
                               <td className="py-3 sm:py-3.5 px-2 sm:px-3">
