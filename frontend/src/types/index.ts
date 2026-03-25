@@ -90,6 +90,8 @@ export interface TelemetryPoint {
   throttle?: number;
   brake?: boolean;
   gear?: number;
+  rpm?: number;
+  drs?: number;
   distance?: number;
 }
 

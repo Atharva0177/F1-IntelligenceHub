@@ -27,6 +27,21 @@ import {
   Area,
 } from "recharts";
 
+type CircuitCorner = {
+  number: number;
+  letter?: string;
+  x: number;
+  y: number;
+  angle?: number;
+};
+
+type CircuitCoords = {
+  x: number[];
+  y: number[];
+  rotation?: number;
+  corners?: CircuitCorner[];
+};
+
 function PodiumDriverImg({ driverName, season }: { driverName: string; season: number }) {
   const parts = driverName.split(' ');
   // Only try the season year (most likely hit) plus a couple of recent fallbacks
@@ -82,7 +97,7 @@ export default function RaceDetailPage() {
   const [telemetryData2, setTelemetryData2] = useState<any[]>([]);
   const [loadingTelemetry, setLoadingTelemetry] = useState(false);
   const [selectedTelemetryLap, setSelectedTelemetryLap] = useState<"fastest" | number>("fastest");
-  const [circuitCoords, setCircuitCoords] = useState<{ x: number[]; y: number[]; rotation?: number } | null>(null);
+  const [circuitCoords, setCircuitCoords] = useState<CircuitCoords | null>(null);
   const [dominanceSubTab, setDominanceSubTab] = useState<
     "overview" | "speed" | "throttle" | "rpm"
   >("overview");
@@ -118,11 +133,29 @@ export default function RaceDetailPage() {
 
         // Load pre-generated circuit coordinates from public JSON
         try {
-          const circuitFile = raceData.name.toLowerCase().replace(/[\s-]+/g, '_') + '.json';
+          const raceSlug = raceData.name
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "");
+          const circuitFile = `${raceSlug}.json`;
           const res = await fetch(`/circuits/${circuitFile}`);
           if (res.ok) {
             const circuitData = await res.json();
-            setCircuitCoords({ x: circuitData.x, y: circuitData.y, rotation: circuitData.rotation ?? 0 });
+            const corners = Array.isArray(circuitData.corners)
+              ? circuitData.corners
+                  .filter((c: any) => c && Number.isFinite(Number(c.x)) && Number.isFinite(Number(c.y)) && Number.isFinite(Number(c.number)))
+                  .map((c: any) => ({
+                    number: Number(c.number),
+                    letter: String(c.letter ?? "").trim(),
+                    x: Number(c.x),
+                    y: Number(c.y),
+                    angle: Number.isFinite(Number(c.angle)) ? Number(c.angle) : undefined,
+                  }))
+              : [];
+
+            setCircuitCoords({ x: circuitData.x, y: circuitData.y, rotation: circuitData.rotation ?? 0, corners });
           }
         } catch (_) { /* silently fall back to telemetry */ }
 
@@ -387,6 +420,188 @@ export default function RaceDetailPage() {
     if (t != null && t > 0) return `+${t.toFixed(3)}s`;
     return null;
   };
+
+  // Telemetry Compare 2.0: segment-level time gained/lost with channel-based explanation.
+  const telemetrySegmentAnalysis = useMemo(() => {
+    if (telemetryData1.length < 20 || telemetryData2.length < 20) return null;
+
+    const prep = (rows: any[]) =>
+      rows
+        .filter((p) => p.distance != null)
+        .map((p) => ({
+          distance: Number(p.distance),
+          speed: Number(p.speed ?? 0),
+          throttle: Number(p.throttle ?? 0),
+          brake: p.brake ? 1 : 0,
+          drs: Number(p.drs ?? 0),
+          rpm: Number(p.rpm ?? 0),
+        }))
+        .sort((a, b) => a.distance - b.distance);
+
+    const d1 = prep(telemetryData1);
+    const d2 = prep(telemetryData2);
+    if (d1.length < 2 || d2.length < 2) return null;
+
+    const maxDist = Math.min(d1[d1.length - 1].distance, d2[d2.length - 1].distance);
+    if (!Number.isFinite(maxDist) || maxDist <= 100) return null;
+
+    const calcSegmentTime = (pts: any[], start: number, end: number) => {
+      const seg = pts.filter((p) => p.distance >= start && p.distance <= end);
+      if (seg.length < 2) return null;
+
+      let t = 0;
+      for (let i = 1; i < seg.length; i++) {
+        const dd = seg[i].distance - seg[i - 1].distance;
+        if (dd <= 0) continue;
+        const speedMs = Math.max(1.0, (seg[i - 1].speed || seg[i].speed || 50) / 3.6);
+        t += dd / speedMs;
+      }
+
+      const avgSpeed = seg.reduce((s, p) => s + p.speed, 0) / seg.length;
+      const fallbackT = (end - start) / Math.max(1.0, avgSpeed / 3.6);
+      const safeT = t > 0 ? t : fallbackT;
+
+      return {
+        time: safeT,
+        avgSpeed,
+        avgThrottle: seg.reduce((s, p) => s + p.throttle, 0) / seg.length,
+        brakeRate: seg.reduce((s, p) => s + p.brake, 0) / seg.length,
+        drsRate: seg.reduce((s, p) => s + (p.drs >= 10 ? 1 : 0), 0) / seg.length,
+        avgRpm: seg.reduce((s, p) => s + p.rpm, 0) / seg.length,
+      };
+    };
+
+    const rows = [] as any[];
+    let total = 0;
+
+    const pushSegment = (start: number, end: number, segmentLabel: string) => {
+      if (end - start <= Math.max(20, maxDist * 0.005)) return;
+      const a = calcSegmentTime(d1, start, end);
+      const b = calcSegmentTime(d2, start, end);
+      if (!a || !b) return;
+
+      const deltaSec = b.time - a.time; // >0 => driver1 gains time
+      total += deltaSec;
+
+      const speedDiff = a.avgSpeed - b.avgSpeed;
+      const throttleDiff = a.avgThrottle - b.avgThrottle;
+      const brakeDiff = b.brakeRate - a.brakeRate;
+      const drsDiff = a.drsRate - b.drsRate;
+      const rpmDiff = a.avgRpm - b.avgRpm;
+
+      const factors = [
+        {
+          score: Math.abs(speedDiff) / 8,
+          text: speedDiff >= 0
+            ? `${telemetryDriver1} carries ${speedDiff.toFixed(1)} km/h more speed`
+            : `${telemetryDriver2} carries ${Math.abs(speedDiff).toFixed(1)} km/h more speed`,
+        },
+        {
+          score: Math.abs(throttleDiff) / 12,
+          text: throttleDiff >= 0
+            ? `${telemetryDriver1} applies throttle earlier`
+            : `${telemetryDriver2} applies throttle earlier`,
+        },
+        {
+          score: Math.abs(brakeDiff) * 2.5,
+          text: brakeDiff >= 0
+            ? `${telemetryDriver1} brakes less in this segment`
+            : `${telemetryDriver2} brakes less in this segment`,
+        },
+        {
+          score: Math.abs(drsDiff) * 2,
+          text: drsDiff >= 0
+            ? `${telemetryDriver1} has more DRS-on time`
+            : `${telemetryDriver2} has more DRS-on time`,
+        },
+        {
+          score: Math.abs(rpmDiff) / 1000,
+          text: rpmDiff >= 0
+            ? `${telemetryDriver1} runs higher revs through the segment`
+            : `${telemetryDriver2} runs higher revs through the segment`,
+        },
+      ];
+
+      factors.sort((x, y) => y.score - x.score);
+
+      rows.push({
+        segment: segmentLabel,
+        start,
+        end,
+        deltaSec,
+        explanation: factors[0]?.text ?? "Mixed channel profile",
+      });
+    };
+
+    // Preferred: real-corner segments (T1-T3, T4-T6...) when corner map exists.
+    let usedCornerSegments = false;
+    if (circuitCoords?.corners && circuitCoords.corners.length >= 3 && circuitCoords.x.length > 3) {
+      const cirPts = circuitCoords.x.map((x, i) => ({ x, y: circuitCoords.y[i] }));
+      const cirDist: number[] = [0];
+      for (let i = 1; i < cirPts.length; i++) {
+        const dx = cirPts[i].x - cirPts[i - 1].x;
+        const dy = cirPts[i].y - cirPts[i - 1].y;
+        cirDist.push(cirDist[i - 1] + Math.sqrt(dx * dx + dy * dy));
+      }
+      const totalCirDist = cirDist[cirDist.length - 1] || 1;
+
+      const nearestTrackIndex = (cx: number, cy: number) => {
+        let bestIdx = 0;
+        let best = Number.POSITIVE_INFINITY;
+        for (let i = 0; i < cirPts.length; i++) {
+          const dx = cirPts[i].x - cx;
+          const dy = cirPts[i].y - cy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < best) {
+            best = d2;
+            bestIdx = i;
+          }
+        }
+        return bestIdx;
+      };
+
+      const cornerMarks = circuitCoords.corners
+        .map((c) => {
+          const idx = nearestTrackIndex(c.x, c.y);
+          return {
+            tag: `${c.number}${c.letter || ""}`,
+            dist: (cirDist[idx] / totalCirDist) * maxDist,
+          };
+        })
+        .filter((c) => Number.isFinite(c.dist))
+        .sort((a, b) => a.dist - b.dist);
+
+      const dedupedCornerMarks = cornerMarks.filter((c, i) => i === 0 || Math.abs(c.dist - cornerMarks[i - 1].dist) > Math.max(5, maxDist * 0.002));
+
+      for (let i = 0; i < dedupedCornerMarks.length; i += 3) {
+        const endIdx = Math.min(i + 2, dedupedCornerMarks.length - 1);
+        const startDist = dedupedCornerMarks[i].dist;
+        const endDist = dedupedCornerMarks[endIdx].dist;
+        const label = `T${dedupedCornerMarks[i].tag}-T${dedupedCornerMarks[endIdx].tag}`;
+        pushSegment(startDist, endDist, label);
+      }
+
+      usedCornerSegments = rows.length > 0;
+    }
+
+    // Fallback: fixed distance segments.
+    if (!usedCornerSegments) {
+      const segCount = 8;
+      const segLen = maxDist / segCount;
+      for (let i = 0; i < segCount; i++) {
+        const start = i * segLen;
+        const end = (i + 1) * segLen;
+        pushSegment(start, end, `S${i + 1}`);
+      }
+    }
+
+    if (rows.length === 0) return null;
+
+    return {
+      rows,
+      total,
+    };
+  }, [telemetryData1, telemetryData2, telemetryDriver1, telemetryDriver2, circuitCoords]);
 
   // Compute bump chart positions from lap time data
   const bumpChartData = useMemo(() => {
@@ -2522,46 +2737,73 @@ export default function RaceDetailPage() {
                     const cbPadX = 50;
                     const cbY = trackH + 10;
 
-                    const renderMap = (pts: SPt[], gradId: string, label: string) => (
-                      <div className="bg-carbon-900/50 rounded-lg p-3">
-                        <div className="text-xs font-bold text-gray-300 mb-2 font-mono">{label}</div>
-                        <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', background: '#0d1117', borderRadius: 6 }}>
-                          <defs>
-                            <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
-                              {Array.from({ length: 20 }, (_, i) => {
-                                const t = i / 19;
-                                return <stop key={i} offset={`${(t*100).toFixed(1)}%`} stopColor={plasmaColor(t)} />;
-                              })}
-                            </linearGradient>
-                          </defs>
-                          {/* Background track */}
-                          {pts.slice(1).map((pt, i) => (
-                            <line key={`bg-${i}`}
-                              x1={sx(pts[i].x)} y1={sy(pts[i].y)}
-                              x2={sx(pt.x)}     y2={sy(pt.y)}
-                              stroke="#1a1a2e" strokeWidth={14} strokeLinecap="round" strokeLinejoin="round"
-                            />
-                          ))}
-                          {/* Speed segments */}
-                          {pts.slice(1).map((pt, i) => {
-                            const t = (pts[i].speed - globalMin) / speedRange;
-                            return (
-                              <line key={`sp-${i}`}
+                    const renderMap = (pts: SPt[], gradId: string, label: string) => {
+                      const cornerMarkers = (circuitCoords?.corners || []).map((c) => ({
+                        x: sx(c.x),
+                        y: sy(c.y),
+                        label: `${c.number}${c.letter || ""}`,
+                      }));
+
+                      return (
+                        <div className="bg-carbon-900/50 rounded-lg p-3">
+                          <div className="text-xs font-bold text-gray-300 mb-2 font-mono">{label}</div>
+                          <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ display: 'block', background: '#0d1117', borderRadius: 6 }}>
+                            <defs>
+                              <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="0%">
+                                {Array.from({ length: 20 }, (_, i) => {
+                                  const t = i / 19;
+                                  return <stop key={i} offset={`${(t*100).toFixed(1)}%`} stopColor={plasmaColor(t)} />;
+                                })}
+                              </linearGradient>
+                            </defs>
+                            {/* Background track */}
+                            {pts.slice(1).map((pt, i) => (
+                              <line key={`bg-${i}`}
                                 x1={sx(pts[i].x)} y1={sy(pts[i].y)}
                                 x2={sx(pt.x)}     y2={sy(pt.y)}
-                                stroke={plasmaColor(t)} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round"
+                                stroke="#1a1a2e" strokeWidth={14} strokeLinecap="round" strokeLinejoin="round"
                               />
-                            );
-                          })}
-                          {/* Colorbar */}
-                          <rect x={cbPadX} y={cbY} width={W - cbPadX*2} height={cbH} fill={`url(#${gradId})`} rx={3} />
-                          <rect x={cbPadX} y={cbY} width={W - cbPadX*2} height={cbH} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5} rx={3} />
-                          <text x={cbPadX} y={cbY + cbH + 14} fill="rgba(255,255,255,0.6)" fontSize={9} fontFamily="monospace" textAnchor="middle">{Math.round(globalMin)} km/h</text>
-                          <text x={W - cbPadX} y={cbY + cbH + 14} fill="rgba(255,255,255,0.6)" fontSize={9} fontFamily="monospace" textAnchor="middle">{Math.round(globalMax)} km/h</text>
-                          <text x={W/2} y={cbY + cbH + 14} fill="rgba(255,255,255,0.35)" fontSize={8} fontFamily="monospace" textAnchor="middle">Speed (shared scale)</text>
-                        </svg>
-                      </div>
-                    );
+                            ))}
+                            {/* Speed segments */}
+                            {pts.slice(1).map((pt, i) => {
+                              const t = (pts[i].speed - globalMin) / speedRange;
+                              return (
+                                <line key={`sp-${i}`}
+                                  x1={sx(pts[i].x)} y1={sy(pts[i].y)}
+                                  x2={sx(pt.x)}     y2={sy(pt.y)}
+                                  stroke={plasmaColor(t)} strokeWidth={5} strokeLinecap="round" strokeLinejoin="round"
+                                />
+                              );
+                            })}
+
+                            {/* Turn markers */}
+                            {cornerMarkers.map((c, i) => (
+                              <g key={`turn-${i}`}>
+                                <circle cx={c.x} cy={c.y} r={2.7} fill="rgba(0,0,0,0.8)" />
+                                <text
+                                  x={c.x + 4}
+                                  y={c.y - 4}
+                                  fontSize={8}
+                                  fill="rgba(255,255,255,0.95)"
+                                  fontFamily="monospace"
+                                  fontWeight={700}
+                                  style={{ paintOrder: 'stroke', stroke: 'rgba(0,0,0,0.85)', strokeWidth: 2 }}
+                                >
+                                  {`T${c.label}`}
+                                </text>
+                              </g>
+                            ))}
+
+                            {/* Colorbar */}
+                            <rect x={cbPadX} y={cbY} width={W - cbPadX*2} height={cbH} fill={`url(#${gradId})`} rx={3} />
+                            <rect x={cbPadX} y={cbY} width={W - cbPadX*2} height={cbH} fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth={0.5} rx={3} />
+                            <text x={cbPadX} y={cbY + cbH + 14} fill="rgba(255,255,255,0.6)" fontSize={9} fontFamily="monospace" textAnchor="middle">{Math.round(globalMin)} km/h</text>
+                            <text x={W - cbPadX} y={cbY + cbH + 14} fill="rgba(255,255,255,0.6)" fontSize={9} fontFamily="monospace" textAnchor="middle">{Math.round(globalMax)} km/h</text>
+                            <text x={W/2} y={cbY + cbH + 14} fill="rgba(255,255,255,0.35)" fontSize={8} fontFamily="monospace" textAnchor="middle">Speed (shared scale)</text>
+                          </svg>
+                        </div>
+                      );
+                    };
 
                     return (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -2601,6 +2843,46 @@ export default function RaceDetailPage() {
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
+
+                  {/* Telemetry Compare 2.0: time gained/lost by segment */}
+                  {telemetrySegmentAnalysis && (
+                    <div className="bg-carbon-900/50 rounded-lg p-4">
+                      <h4 className="text-sm font-bold text-gray-300 mb-1">Telemetry Compare 2.0 - Segment Gain/Loss</h4>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Positive delta means {telemetryDriver1} gains time versus {telemetryDriver2} in that segment.
+                      </p>
+
+                      <div className="mb-3 text-xs">
+                        <span className={`font-mono font-bold ${telemetrySegmentAnalysis.total >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                          Net: {telemetrySegmentAnalysis.total >= 0 ? '+' : ''}{telemetrySegmentAnalysis.total.toFixed(3)}s
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {telemetrySegmentAnalysis.rows.map((row: any) => {
+                          const pct = Math.min(100, Math.max(2, Math.abs(row.deltaSec) * 140));
+                          const gain = row.deltaSec >= 0;
+                          return (
+                            <div key={row.segment} className="border border-carbon-700/60 rounded-md p-2">
+                              <div className="flex items-center justify-between text-xs mb-1">
+                                <span className="font-bold text-gray-300">{row.segment}</span>
+                                <span className={`font-mono font-bold ${gain ? 'text-emerald-400' : 'text-red-400'}`}>
+                                  {gain ? '+' : ''}{row.deltaSec.toFixed(3)}s
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-carbon-800 rounded overflow-hidden mb-1">
+                                <div
+                                  className={`h-full ${gain ? 'bg-emerald-500/80' : 'bg-red-500/80'}`}
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                              <div className="text-[11px] text-gray-500">{row.explanation}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload, aliased
 from sqlalchemy import func
+import re
 from database.config import get_db
 from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData, RaceControlMessage, PitStop
 from typing import List, Optional
@@ -279,8 +280,27 @@ async def get_next_session(db: Session = Depends(get_db)):
         upcoming.sort(key=lambda x: x[0])
         _, next_session = upcoming[0]
 
-        # Try matching an existing local race for deep-linking; otherwise keep null.
-        race_name = next_session.get("meeting_name") or "Upcoming Session"
+        # Resolve race/meeting name as reliably as possible so the navbar can
+        # show both race and session (not just session type).
+        race_name = next_session.get("meeting_name")
+        meeting_key = next_session.get("meeting_key")
+        if not race_name and meeting_key is not None:
+            try:
+                meeting = await openf1_service.get_meeting(int(meeting_key))
+                if meeting:
+                    race_name = (
+                        meeting.get("meeting_name")
+                        or meeting.get("meeting_official_name")
+                        or meeting.get("country_name")
+                    )
+            except Exception:
+                race_name = None
+
+        if not race_name:
+            country = next_session.get("country_name")
+            location = next_session.get("location")
+            race_name = country or location or "Upcoming Race"
+
         local_race = (
             db.query(Race)
             .filter(func.lower(Race.name) == func.lower(race_name))
@@ -519,6 +539,7 @@ async def get_race_replay_data(race_id: int, db: Session = Depends(get_db)):
     drivers = {
         r.driver.code: {
             "full_name": _driver_full_name(r.driver),
+            "driver_number": r.driver.number,
             "team": r.team.name if r.team else "",
             "final_position": r.position,
             "grid_position": r.grid_position,
@@ -528,6 +549,29 @@ async def get_race_replay_data(race_id: int, db: Session = Depends(get_db)):
         for r in race.results
         if r.driver
     }
+
+    number_to_code = {
+        str(r.driver.number): r.driver.code
+        for r in race.results
+        if r.driver and r.driver.code and r.driver.number is not None
+    }
+    code_set = {code.upper() for code in drivers.keys()}
+
+    def _driver_from_rc(msg_text: Optional[str], scope_text: Optional[str]) -> Optional[str]:
+        text = f"{msg_text or ''} {scope_text or ''}".upper()
+        if not text.strip():
+            return None
+
+        for code in code_set:
+            if re.search(rf"\b{re.escape(code)}\b", text):
+                return code
+
+        for match in re.findall(r"\b(?:CAR\s*)?(\d{1,2})\b", text):
+            mapped = number_to_code.get(match)
+            if mapped:
+                return mapped
+
+        return None
 
     # Race control messages for the race session (flags & safety car only)
     rc_rows = (
@@ -539,17 +583,21 @@ async def get_race_replay_data(race_id: int, db: Session = Depends(get_db)):
         .order_by(RaceControlMessage.timestamp)
         .all()
     )
-    race_control = [
-        {
-            "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-            "category": msg.category,
-            "message": msg.message,
-            "flag": msg.flag,
-            "status": msg.status,
-            "scope": msg.scope,
-        }
-        for msg in rc_rows
-    ]
+    race_control = []
+    for msg in rc_rows:
+        rc_driver_code = _driver_from_rc(msg.message, msg.scope)
+        race_control.append(
+            {
+                "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
+                "category": msg.category,
+                "message": msg.message,
+                "flag": msg.flag,
+                "status": msg.status,
+                "scope": msg.scope,
+                "driver_code": rc_driver_code if rc_driver_code in drivers else None,
+                "driver_name": drivers.get(rc_driver_code, {}).get("full_name") if rc_driver_code else None,
+            }
+        )
 
     # Provide the session start time so the frontend can compute message elapsed times
     session_start_iso = race_session.date.isoformat() if race_session.date else None

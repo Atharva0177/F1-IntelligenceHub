@@ -54,6 +54,8 @@ interface RcMsg {
   flag: string | null;
   status: string | null;
   scope: string | null;
+  driver_code?: string | null;
+  driver_name?: string | null;
 }
 
 /** Map a race control message to the same kind codes used by track status */
@@ -141,6 +143,7 @@ function fmtLap(s: number): string {
 
 export default function RaceReplay({ race, positionData, driverColors, weatherSummary, driverInfo, drsTelemetry, raceControlMessages = [], sessionStart = null }: Props) {
   const [circuitPts, setCircuitPts] = useState<{ x: number; y: number }[]>([]);
+  const [circuitCorners, setCircuitCorners] = useState<Array<{ number: number; letter?: string; x: number; y: number }>>([]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [speedIdx, setSpeedIdx] = useState(4); // default 1x
@@ -293,13 +296,39 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
     }
     return result;
   }, [raceControlMessages, lapStatusIntervals, sessionStart]);
+
+  const formatRcMessage = useCallback((msg: RcMsg): string => {
+    const code = (msg.driver_code || '').trim();
+    const name = (msg.driver_name || '').trim();
+    if (code) return `[${code}] ${msg.message}`;
+    if (name) return `[${name}] ${msg.message}`;
+    return msg.message;
+  }, []);
   /* ── Circuit load ─────────────────────────────────────────────────── */
   useEffect(() => {
-    const slug = race.name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const slug = race.name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
     fetch(`/circuits/${slug}.json`)
       .then(r => (r.ok ? r.json() : null))
-      .then((data: { x: number[]; y: number[] } | null) => {
-        if (data?.x?.length) setCircuitPts(data.x.map((x, i) => ({ x, y: data.y[i] })));
+      .then((data: { x: number[]; y: number[]; corners?: Array<{ number: number; letter?: string; x: number; y: number }> } | null) => {
+        if (data?.x?.length) {
+          setCircuitPts(data.x.map((x, i) => ({ x, y: data.y[i] })));
+          const corners = Array.isArray(data.corners)
+            ? data.corners
+                .filter((c) => c && Number.isFinite(Number(c.number)) && Number.isFinite(Number(c.x)) && Number.isFinite(Number(c.y)))
+                .map((c) => ({
+                  number: Number(c.number),
+                  letter: c.letter ? String(c.letter) : '',
+                  x: Number(c.x),
+                  y: Number(c.y),
+                }))
+            : [];
+          setCircuitCorners(corners);
+        }
       })
       .catch(() => {});
   }, [race.name]);
@@ -953,7 +982,7 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
                   >
                     {msgs.map((m, i) => (
                       <p key={i} className="text-white/75 text-[9px] leading-snug font-mono">
-                        {m.message}
+                        {formatRcMessage(m)}
                       </p>
                     ))}
                   </div>
@@ -977,6 +1006,26 @@ export default function RaceReplay({ race, positionData, driverColors, weatherSu
                 <path d={trackPath} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
               </>
             )}
+
+            {/* Turn labels */}
+            {transform && circuitCorners.map((c, i) => (
+              <g key={`turn-${i}`}>
+                <circle cx={transform.sx(c.x)} cy={transform.sy(c.y)} r={3.2} fill="rgba(0,0,0,0.85)" stroke="rgba(255,255,255,0.65)" strokeWidth={0.7} />
+                <text
+                  x={transform.sx(c.x) + 4.5}
+                  y={transform.sy(c.y) - 4.5}
+                  fill="rgba(255,255,255,0.95)"
+                  fontSize={8}
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                  paintOrder="stroke"
+                  stroke="#000"
+                  strokeWidth={2.2}
+                >
+                  {`T${c.number}${c.letter || ''}`}
+                </text>
+              </g>
+            ))}
 
             {/* ── Green leader progress trail removed ── */}
 

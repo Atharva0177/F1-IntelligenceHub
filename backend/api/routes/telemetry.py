@@ -20,6 +20,8 @@ class TelemetryPointSchema(BaseModel):
     throttle: Optional[float]
     brake: Optional[bool]
     gear: Optional[int]
+    rpm: Optional[float]
+    drs: Optional[int]
     distance: Optional[float]
     
     class Config:
@@ -64,6 +66,8 @@ async def get_session_telemetry(
             "throttle": t.throttle,
             "brake": t.brake,
             "gear": t.gear,
+            "rpm": t.rpm,
+            "drs": t.drs,
             "distance": t.distance
         }
         for t in telemetry

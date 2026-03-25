@@ -845,3 +845,155 @@ async def predict_race(
         "winner_prediction": drivers_out[0] if drivers_out else None,
         "feature_importance": _get_feature_importance(model, model_type),
     }
+
+
+@router.get("/race/{race_id}/simulate")
+async def simulate_race_outcomes(
+    race_id: int,
+    model_type: str = Query("gb", description="Model: 'gb' | 'rf' | 'nn' | 'xgb'"),
+    iterations: int = Query(3000, ge=500, le=10000),
+    db: Session = Depends(get_db),
+):
+    """
+    Monte Carlo race outcome simulator.
+
+    Inputs are inferred from available pre-race signals:
+      - qualifying position / gap to pole
+      - long-run pace proxy (FP2 pace gap)
+      - degradation proxy (recent team pace + pit profile)
+      - pit-stop distributions (avg pit stops)
+
+    Output:
+      - per-driver finishing probabilities (P1/P3/P5/P10)
+      - expected finishing position
+      - full position distribution (P1..Pn)
+    """
+    # Prepare race-level prediction baseline (same feature pipeline as predict_race)
+    df_raw = _load_results(db)
+    qual_df = _load_qualifying(db)
+    fp2_df = _load_fp2_pace(db)
+    dnf_df = _load_dnf_rates(db)
+    pit_df = _load_pit_counts(db)
+    weather_df = _load_race_weather(db)
+    if df_raw.empty:
+        raise HTTPException(400, "No race result data in database")
+
+    df = _engineer_features(df_raw, qual_df, fp2_df, dnf_df, pit_df, weather_df)
+    train_df = df[df["race_id"] != race_id].dropna(subset=FEATURE_COLS)
+    predict_df = df[df["race_id"] == race_id].copy()
+
+    if predict_df.empty:
+        pre_race_df = _load_pre_race_candidates(db, race_id)
+        if pre_race_df.empty:
+            raise HTTPException(404, "Race not found or no competitor data (need qualifying or race results)")
+
+        combined_df = pd.concat([df_raw, pre_race_df], ignore_index=True, sort=False)
+        combined_df["race_date"] = pd.to_datetime(combined_df["race_date"])
+        combined_df["position"] = pd.to_numeric(combined_df["position"], errors="coerce")
+        combined_df["grid_position"] = pd.to_numeric(combined_df["grid_position"], errors="coerce").fillna(10.0)
+        combined_df["points"] = pd.to_numeric(combined_df["points"], errors="coerce").fillna(0.0)
+        combined_df = combined_df.sort_values(["race_date", "race_id", "position"], na_position="last").reset_index(drop=True)
+
+        df = _engineer_features(combined_df, qual_df, fp2_df, dnf_df, pit_df, weather_df)
+        train_df = df[df["race_id"] != race_id].dropna(subset=FEATURE_COLS)
+        predict_df = df[df["race_id"] == race_id].copy()
+
+    if len(train_df) < 80:
+        raise HTTPException(400, f"Only {len(train_df)} training samples – need at least 80 rows of historical data")
+
+    X_train = train_df[FEATURE_COLS].fillna(10.0).values.astype(float)
+    y_finish = train_df["pos_filled"].values.astype(float)
+    X_pred = predict_df[FEATURE_COLS].fillna(10.0).values.astype(float)
+
+    try:
+        model = _make_model(model_type)
+        sample_weight = np.clip(25.0 - y_finish, 1.0, None)
+        if model_type == "nn":
+            model.fit(X_train, y_finish)
+        else:
+            model.fit(X_train, y_finish, sample_weight=sample_weight)
+    except Exception as exc:
+        raise HTTPException(500, f"Model training failed: {exc}")
+
+    raw_finish_pred = np.asarray(model.predict(X_pred), dtype=float)
+    raw_finish_pred = np.clip(raw_finish_pred, 1.0, float(max(len(predict_df), 20)))
+
+    drivers = []
+    for i, row in enumerate(predict_df.itertuples(index=False)):
+        drivers.append({
+            "driver_code": str(row.driver_code),
+            "team_name": str(row.team_name) if pd.notna(row.team_name) else None,
+            "grid_position": int(row.grid_position) if pd.notna(row.grid_position) else None,
+            "qual_position": int(row.qual_position) if pd.notna(row.qual_position) else None,
+            "mu_finish": float(raw_finish_pred[i]),
+            "fp2_pace_gap": float(row.fp2_pace_gap) if pd.notna(row.fp2_pace_gap) else 3.0,
+            "dnf_rate": float(row.dnf_rate) if pd.notna(row.dnf_rate) else 0.07,
+            "avg_pit_stops": float(row.avg_pit_stops) if pd.notna(row.avg_pit_stops) else 2.0,
+            "recent_team_avg": float(row.recent_team_avg) if pd.notna(row.recent_team_avg) else 10.0,
+        })
+
+    n = len(drivers)
+    if n == 0:
+        raise HTTPException(400, "No drivers available for simulation")
+
+    counts = np.zeros((n, n), dtype=np.int32)
+    rng = np.random.default_rng(42)
+
+    for _ in range(iterations):
+        scored = []
+        for idx, d in enumerate(drivers):
+            # Base expectation from trained model
+            base = d["mu_finish"]
+
+            # Long-run pace variation (larger fp2 gap => larger downside variance)
+            pace_sigma = 0.45 + 0.18 * max(0.0, d["fp2_pace_gap"])
+
+            # Degradation / stint risk proxy from pit profile and team trend
+            deg_sigma = 0.20 + 0.06 * max(0.0, d["avg_pit_stops"] - 1.0)
+            team_penalty = max(0.0, (d["recent_team_avg"] - 7.0) * 0.03)
+
+            # Pit-stop randomness from historical stop profile
+            pit_noise = rng.normal(0.0, 0.10 + 0.04 * d["avg_pit_stops"])
+
+            score = base + team_penalty + rng.normal(0.0, pace_sigma) + rng.normal(0.0, deg_sigma) + pit_noise
+
+            # DNF event moves driver to back markers in this simulation run
+            dnf_prob = min(max(d["dnf_rate"], 0.0), 0.75) * 0.45
+            if rng.random() < dnf_prob:
+                score += rng.uniform(8.0, 16.0)
+
+            scored.append((score, idx))
+
+        scored.sort(key=lambda x: x[0])  # lower predicted finish score is better
+        for pos, (_, idx) in enumerate(scored):
+            counts[idx, pos] += 1
+
+    probs = counts / float(iterations)
+
+    out = []
+    for i, d in enumerate(drivers):
+        expected_finish = float(np.sum((np.arange(n) + 1) * probs[i]))
+        out.append({
+            "driver_code": d["driver_code"],
+            "team_name": d["team_name"],
+            "grid_position": d["grid_position"],
+            "qual_position": d["qual_position"],
+            "win_probability": round(float(probs[i, 0]), 4),
+            "podium_probability": round(float(np.sum(probs[i, : min(3, n)])), 4),
+            "top5_probability": round(float(np.sum(probs[i, : min(5, n)])), 4),
+            "top10_probability": round(float(np.sum(probs[i, : min(10, n)])), 4),
+            "expected_finish": round(expected_finish, 3),
+            "position_distribution": [round(float(p), 4) for p in probs[i].tolist()],
+        })
+
+    out.sort(key=lambda d: d["expected_finish"])
+
+    race_row = predict_df.iloc[0]
+    return {
+        "race_id": race_id,
+        "race_name": str(race_row["race_name"]),
+        "race_date": str(race_row["race_date"].date()),
+        "model_type": model_type,
+        "iterations": iterations,
+        "drivers": out,
+    }

@@ -277,6 +277,9 @@ export default function PredictionsPage() {
   const [modelType, setModelType] = useState('gb');
   const [prediction, setPrediction] = useState<any | null>(null);
   const [loadingPrediction, setLoadingPrediction] = useState(false);
+  const [simulation, setSimulation] = useState<any | null>(null);
+  const [loadingSimulation, setLoadingSimulation] = useState(false);
+  const [simIterations, setSimIterations] = useState(3000);
   const [error, setError] = useState<string | null>(null);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
 
@@ -310,9 +313,27 @@ export default function PredictionsPage() {
     }
   }, [selectedRaceId, modelType]);
 
+  const fetchSimulation = useCallback(async () => {
+    if (!selectedRaceId) return;
+    setLoadingSimulation(true);
+    setSimulation(null);
+    try {
+      const data = await api.simulateRaceOutcome(selectedRaceId, modelType, simIterations);
+      setSimulation(data);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail ?? 'Monte Carlo simulation failed. Try another race.');
+    } finally {
+      setLoadingSimulation(false);
+    }
+  }, [selectedRaceId, modelType, simIterations]);
+
   useEffect(() => {
     fetchPrediction();
   }, [fetchPrediction]);
+
+  useEffect(() => {
+    fetchSimulation();
+  }, [fetchSimulation]);
 
   const years = [...new Set(races.map((r) => r.year))].sort((a, b) => b - a);
   const filteredRaces = selectedYear ? races.filter((r) => r.year === selectedYear) : races;
@@ -605,6 +626,73 @@ export default function PredictionsPage() {
                     />
                   ))}
                 </div>
+              </div>
+
+              {/* Monte Carlo outcome simulator */}
+              <div className="bg-carbon-800 rounded-xl border border-carbon-700 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-gray-500">
+                    Race Outcome Simulator (Monte Carlo)
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] text-gray-500 uppercase tracking-wider">Runs</label>
+                    <select
+                      value={simIterations}
+                      onChange={(e) => setSimIterations(Number(e.target.value))}
+                      className="bg-carbon-900 border border-carbon-700 rounded px-2 py-1 text-xs text-white"
+                    >
+                      <option value={1000}>1,000</option>
+                      <option value={3000}>3,000</option>
+                      <option value={5000}>5,000</option>
+                      <option value={10000}>10,000</option>
+                    </select>
+                  </div>
+                </div>
+
+                {loadingSimulation ? (
+                  <div className="text-sm text-gray-400">Running simulation...</div>
+                ) : !simulation?.drivers?.length ? (
+                  <div className="text-sm text-gray-500">No simulation data available.</div>
+                ) : (
+                  <>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Uses qualifying position, long-run pace proxy (FP2), degradation proxy and pit-stop distributions.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-carbon-700 text-gray-500 uppercase tracking-wider">
+                            <th className="text-left py-2 px-2">Driver</th>
+                            <th className="text-right py-2 px-2">Expected</th>
+                            <th className="text-right py-2 px-2">Win</th>
+                            <th className="text-right py-2 px-2">Podium</th>
+                            <th className="text-right py-2 px-2">Top 5</th>
+                            <th className="text-right py-2 px-2">Top 10</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {simulation.drivers.map((d: any) => {
+                            const col = predictionDriverStyles[d.driver_code]?.color ?? '#888';
+                            return (
+                              <tr key={`sim-${d.driver_code}`} className="border-b border-carbon-700/30 hover:bg-carbon-700/20">
+                                <td className="py-2 px-2">
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-white font-black text-[10px]" style={{ background: col }}>
+                                    {d.driver_code}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2 text-right text-white font-mono font-bold">P{d.expected_finish.toFixed(2)}</td>
+                                <td className="py-2 px-2 text-right font-mono text-yellow-400">{(d.win_probability * 100).toFixed(1)}%</td>
+                                <td className="py-2 px-2 text-right font-mono text-gray-300">{(d.podium_probability * 100).toFixed(1)}%</td>
+                                <td className="py-2 px-2 text-right font-mono text-gray-300">{(d.top5_probability * 100).toFixed(1)}%</td>
+                                <td className="py-2 px-2 text-right font-mono text-gray-300">{(d.top10_probability * 100).toFixed(1)}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Feature importance */}

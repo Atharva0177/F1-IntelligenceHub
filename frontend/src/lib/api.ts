@@ -77,6 +77,8 @@ export const api = {
       flag: string | null;
       status: string | null;
       scope: string | null;
+      driver_code?: string | null;
+      driver_name?: string | null;
     }>;
   }> {
     const response = await apiClient.get(`/api/races/${raceId}/replay-data`);
@@ -237,6 +239,14 @@ export const api = {
     const response = await apiClient.get(`/api/predictions/race/${raceId}`, {
       params: { model_type: modelType },
       timeout: 60000, // model training can take up to ~30s on first run
+    });
+    return response.data;
+  },
+
+  async simulateRaceOutcome(raceId: number, modelType = 'gb', iterations = 3000): Promise<any> {
+    const response = await apiClient.get(`/api/predictions/race/${raceId}/simulate`, {
+      params: { model_type: modelType, iterations },
+      timeout: 60000,
     });
     return response.data;
   },
