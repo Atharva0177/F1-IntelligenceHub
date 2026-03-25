@@ -115,6 +115,12 @@ docker compose exec postgres psql -U f1user -d f1_intelligence_hub -c \
 
 # Load data for a specific year
 docker compose run --rm loader python scripts/initial_data_load.py 2025 --sync
+
+# Preview deletion counts for one season (safe)
+docker compose run --rm loader python scripts/delete_season_data.py 2025 --dry-run
+
+# Delete one season (non-interactive)
+docker compose run --rm loader python scripts/delete_season_data.py 2025 --yes
 ```
 
 ---

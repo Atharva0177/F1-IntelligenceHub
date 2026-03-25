@@ -29,10 +29,10 @@ if (-not (Test-Path ".env")) {
         Copy-Item ".env.example" ".env"
         Write-Host "  [2/6] .env created from .env.example" -ForegroundColor Green
     } else {
-        Write-Host "  [2/6] WARNING: no .env or .env.example found - continuing" -ForegroundColor Yellow
+        Write-Host "  [2/6] WARNING: no .env or .env.example found — continuing" -ForegroundColor Yellow
     }
 } else {
-    Write-Host "  [2/6] .env already exists - skipped" -ForegroundColor DarkGray
+    Write-Host "  [2/6] .env already exists — skipped" -ForegroundColor DarkGray
 }
 
 # ── 3. Directories ─────────────────────────────────────────────────────────────
@@ -131,17 +131,16 @@ if (-not (Test-Path $backupFile)) {
         if ($pvAvailable) {
             docker exec -it f1_postgres sh -c "pv -petar /tmp/f1_dump.sql | psql -U f1user -d f1_intelligence_hub -q"
         } else {
-            Write-Host "        (pv not available - showing live row counts)" -ForegroundColor DarkGray
+            Write-Host "        (pv not available — showing live row counts)" -ForegroundColor DarkGray
             $job = Start-Job -ScriptBlock {
                 docker exec f1_postgres psql -U f1user -d f1_intelligence_hub -q -f /tmp/f1_dump.sql 2>&1
             }
-            $spin = @('|', '/', '-', [char]92)
-            $spinIdx = 0
-            $liveCountSql = "SELECT relname || '=' || n_live_tup FROM pg_stat_user_tables WHERE n_live_tup > 0 ORDER BY n_live_tup DESC LIMIT 5;"
+            $spin = @('|','/','-','\'); $spinIdx = 0
             while ($job.State -eq 'Running') {
                 Start-Sleep -Seconds 3
                 $s = $spin[$spinIdx++ % 4]
-                $r = docker exec f1_postgres psql -U f1user -d f1_intelligence_hub -t -q -c $liveCountSql 2>$null
+                $r = docker exec f1_postgres psql -U f1user -d f1_intelligence_hub -t -q -c `
+                     "SELECT relname||'='||n_live_tup FROM pg_stat_user_tables WHERE n_live_tup>0 ORDER BY n_live_tup DESC LIMIT 5;" 2>$null
                 $summary = ($r | Where-Object { $_ -match '\S' } | ForEach-Object { $_.Trim() }) -join '  '
                 Write-Host "        $s [$($sw.Elapsed.ToString('mm\:ss'))]  $summary" -ForegroundColor DarkGray
             }
