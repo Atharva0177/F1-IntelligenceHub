@@ -203,7 +203,7 @@ export const api = {
     return response.data;
   },
 
-  async getNextSession(): Promise<{ race_id: number; race_name: string; session_type: string; session_date: string } | null> {
+  async getNextSession(): Promise<{ race_id?: number | null; race_name: string; session_type: string; session_date: string; source?: string } | null> {
     const response = await apiClient.get('/api/races/next-session');
     return response.data ?? null;
   },

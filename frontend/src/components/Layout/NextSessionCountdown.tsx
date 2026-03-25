@@ -5,10 +5,11 @@ import Link from 'next/link';
 import { api } from '@/lib/api';
 
 interface NextSession {
-  race_id: number;
+  race_id?: number | null;
   race_name: string;
   session_type: string;
   session_date: string; // ISO UTC string
+  source?: string;
 }
 
 function useNextSession() {
@@ -77,17 +78,29 @@ export default function NextSessionCountdown() {
   const next = useNextSession();
   const diff = useCountdown(next?.session_date);
 
-  if (!next || diff < 0) return null;
+  if (!next) {
+    return (
+      <Link
+        href="/races"
+        className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700 hover:border-carbon-500 transition-colors group"
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-500 flex-shrink-0" />
+        <div className="flex flex-col leading-none">
+          <span className="text-[10px] text-gray-500 font-medium">Next session</span>
+          <span className="text-xs font-mono font-bold tabular-nums text-gray-300">Not scheduled in DB</span>
+        </div>
+      </Link>
+    );
+  }
+
+  if (diff < 0) return null;
 
   const { primary } = formatDiff(diff);
   const isImminent = diff < 60 * 60 * 1000; // < 1 hour
   const sessionLabel = next.session_type;
-
-  return (
-    <Link
-      href={`/races/${next.race_id}`}
-      className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700 hover:border-carbon-500 transition-colors group"
-    >
+  const hasRaceLink = typeof next.race_id === 'number' && next.race_id > 0;
+  const content = (
+    <>
       {/* Pulsing dot — red when imminent, green otherwise */}
       <span
         className={`w-1.5 h-1.5 rounded-full animate-pulse flex-shrink-0 ${
@@ -105,6 +118,23 @@ export default function NextSessionCountdown() {
           {primary}
         </span>
       </div>
-    </Link>
+    </>
+  );
+
+  if (hasRaceLink) {
+    return (
+      <Link
+        href={`/races/${next.race_id}`}
+        className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700 hover:border-carbon-500 transition-colors group"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700">
+      {content}
+    </div>
   );
 }

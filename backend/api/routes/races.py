@@ -6,6 +6,7 @@ from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import date, datetime, timezone
+from data_pipeline import openf1_service
 
 router = APIRouter()
 
@@ -228,7 +229,12 @@ async def get_data_version(db: Session = Depends(get_db)):
 
 @router.get("/next-session")
 async def get_next_session(db: Session = Depends(get_db)):
-    """Return the next upcoming session (across all seasons) with its race name."""
+    """Return the next upcoming session.
+
+    Priority:
+      1) Upcoming local DB session
+      2) Upcoming OpenF1 online session fallback
+    """
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     row = (
         db.query(DBSession, Race)
@@ -237,15 +243,60 @@ async def get_next_session(db: Session = Depends(get_db)):
         .order_by(DBSession.date.asc())
         .first()
     )
-    if not row:
-        return None
-    session, race = row
-    return {
-        "race_id": race.id,
-        "race_name": race.name,
-        "session_type": session.session_type,
-        "session_date": session.date.isoformat() + "Z",
-    }
+    if row:
+        session, race = row
+        return {
+            "race_id": race.id,
+            "race_name": race.name,
+            "session_type": session.session_type,
+            "session_date": session.date.isoformat() + "Z",
+            "source": "db",
+        }
+
+    # Fallback: use OpenF1 schedule when DB has no future sessions.
+    now_utc = datetime.now(timezone.utc)
+    for year in (now_utc.year, now_utc.year + 1):
+        try:
+            sessions = await openf1_service._get("/sessions", {"year": year})
+        except Exception:
+            continue
+
+        upcoming = []
+        for s in sessions or []:
+            date_start = s.get("date_start")
+            if not date_start:
+                continue
+            try:
+                start_dt = datetime.fromisoformat(date_start.replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if start_dt > now_utc:
+                upcoming.append((start_dt, s))
+
+        if not upcoming:
+            continue
+
+        upcoming.sort(key=lambda x: x[0])
+        _, next_session = upcoming[0]
+
+        # Try matching an existing local race for deep-linking; otherwise keep null.
+        race_name = next_session.get("meeting_name") or "Upcoming Session"
+        local_race = (
+            db.query(Race)
+            .filter(func.lower(Race.name) == func.lower(race_name))
+            .order_by(Race.date.desc())
+            .first()
+        )
+
+        return {
+            "race_id": local_race.id if local_race else None,
+            "race_name": race_name,
+            "session_type": next_session.get("session_name") or next_session.get("session_type") or "Session",
+            "session_date": next_session.get("date_start"),
+            "source": "openf1",
+        }
+
+    return None
 
 
 @router.get("/{race_id}", response_model=RaceDetailSchema)
