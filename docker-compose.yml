@@ -35,11 +35,20 @@ services:
       DB_USER: f1user
       DB_PASSWORD: f1password
       FASTF1_CACHE_DIR: /app/fastf1_cache
-      CORS_ORIGINS: "http://localhost:3000,https://repressively-faintish-helen.ngrok-free.dev,https://f1hub.freeddns.org"
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+      ENABLE_API_DOCS: ${ENABLE_API_DOCS}
+      RATE_LIMIT_WINDOW_SECONDS: ${RATE_LIMIT_WINDOW_SECONDS}
+      RATE_LIMIT_API_MAX_REQUESTS: ${RATE_LIMIT_API_MAX_REQUESTS}
+      RATE_LIMIT_ADMIN_MAX_REQUESTS: ${RATE_LIMIT_ADMIN_MAX_REQUESTS}
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      ADMIN_SESSION_TTL_HOURS: ${ADMIN_SESSION_TTL_HOURS}
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - ./:/workspace
       - ./fastf1_cache:/app/fastf1_cache
     depends_on:
       postgres:
@@ -83,6 +92,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        BACKEND_URL: http://backend:8000
     container_name: f1_frontend
     environment:
       BACKEND_URL: http://backend:8000

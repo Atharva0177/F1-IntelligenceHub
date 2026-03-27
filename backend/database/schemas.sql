@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS drivers (
     first_name VARCHAR(100),
     last_name VARCHAR(100),
     nationality VARCHAR(100),
-    date_of_birth DATE
+    date_of_birth DATE,
+    image_url VARCHAR(500)
 );
 
 CREATE INDEX idx_drivers_code ON drivers(code);
@@ -40,7 +41,8 @@ CREATE INDEX idx_drivers_code ON drivers(code);
 CREATE TABLE IF NOT EXISTS teams (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    nationality VARCHAR(100)
+    nationality VARCHAR(100),
+    image_url VARCHAR(500)
 );
 
 -- Races table
@@ -160,6 +162,33 @@ CREATE INDEX IF NOT EXISTS idx_results_race_driver_sprint ON results(race_id, dr
 -- Backward-compatible patch for databases created before is_sprint existed
 ALTER TABLE IF EXISTS results
 ADD COLUMN IF NOT EXISTS is_sprint BOOLEAN NOT NULL DEFAULT FALSE;
+
+ALTER TABLE IF EXISTS drivers
+ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
+
+ALTER TABLE IF EXISTS teams
+ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
+
+CREATE TABLE IF NOT EXISTS season_driver_profiles (
+    id SERIAL PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    driver_id INTEGER NOT NULL REFERENCES drivers(id),
+    driver_number INTEGER,
+    image_url VARCHAR(500)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_season_driver_profiles_unique
+ON season_driver_profiles(season_id, driver_id);
+
+CREATE TABLE IF NOT EXISTS season_team_profiles (
+    id SERIAL PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES seasons(id),
+    team_id INTEGER NOT NULL REFERENCES teams(id),
+    image_url VARCHAR(500)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_season_team_profiles_unique
+ON season_team_profiles(season_id, team_id);
 
 -- Qualifying results table
 CREATE TABLE IF NOT EXISTS qualifying (

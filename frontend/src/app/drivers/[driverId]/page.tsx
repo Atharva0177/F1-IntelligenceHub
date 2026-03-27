@@ -56,8 +56,9 @@ export default function DriverDetailPage() {
 
   useEffect(() => {
     if (!driverId) return;
-    api.getDriverDetail(driverId).then(setDriver).catch(console.error).finally(() => setLoading(false));
-  }, [driverId]);
+    const seasonNum = selectedSeason || undefined;
+    api.getDriverDetail(driverId, seasonNum).then(setDriver).catch(console.error).finally(() => setLoading(false));
+  }, [driverId, selectedSeason]);
 
   useEffect(() => {
     if (!driverId || !selectedSeason) return;
@@ -83,7 +84,8 @@ export default function DriverDetailPage() {
   const pointsPerRace    = results.length > 0 ? totalPoints / results.length : 0;
 
   const tc      = teamColor(driver.team_name);
-  const imgUrls = getDriverImageUrls(driver.first_name, driver.last_name, selectedSeason, 800);
+  const autoUrls = getDriverImageUrls(driver.first_name, driver.last_name, selectedSeason, 800);
+  const imgUrls = driver.image_url ? [driver.image_url, ...autoUrls] : autoUrls;
   const imgSrc  = imgUrlIdx < imgUrls.length ? imgUrls[imgUrlIdx] : '';
 
   // running points tally

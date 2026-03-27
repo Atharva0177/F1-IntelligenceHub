@@ -85,6 +85,39 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_results_race_driver_sprint
             ON results(race_id, driver_id, is_sprint)
         """))
+        conn.execute(text("""
+            ALTER TABLE IF EXISTS drivers
+            ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)
+        """))
+        conn.execute(text("""
+            ALTER TABLE IF EXISTS teams
+            ADD COLUMN IF NOT EXISTS image_url VARCHAR(500)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS season_driver_profiles (
+                id SERIAL PRIMARY KEY,
+                season_id INTEGER NOT NULL REFERENCES seasons(id),
+                driver_id INTEGER NOT NULL REFERENCES drivers(id),
+                driver_number INTEGER,
+                image_url VARCHAR(500)
+            )
+        """))
+        conn.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_season_driver_profiles_unique
+            ON season_driver_profiles(season_id, driver_id)
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS season_team_profiles (
+                id SERIAL PRIMARY KEY,
+                season_id INTEGER NOT NULL REFERENCES seasons(id),
+                team_id INTEGER NOT NULL REFERENCES teams(id),
+                image_url VARCHAR(500)
+            )
+        """))
+        conn.execute(text("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_season_team_profiles_unique
+            ON season_team_profiles(season_id, team_id)
+        """))
 
     print("Database tables created successfully")
 

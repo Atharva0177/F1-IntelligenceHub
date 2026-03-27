@@ -292,13 +292,14 @@ function TeamLogoFallback({ name, large = false }: { name: string; large?: boole
 
 /** TeamLogo — tries F1 CDN logo URLs, falls back to abbreviation badge */
 function TeamLogo({
-  teamName, season, className, style, fallbackLarge,
+  teamName, season, className, style, fallbackLarge, preferredUrl,
 }: {
   teamName: string; season: number;
   className?: string; style?: React.CSSProperties;
   fallbackLarge?: boolean;
+  preferredUrl?: string;
 }) {
-  const urls = getLogoUrls(teamName, season);
+  const urls = preferredUrl ? [preferredUrl, ...getLogoUrls(teamName, season)] : getLogoUrls(teamName, season);
   const [failedSet, setFailedSet] = useState<Set<string>>(new Set());
   useEffect(() => setFailedSet(new Set()), [teamName, season]);
   const currentUrl = urls.find(u => !failedSet.has(u));
@@ -354,7 +355,8 @@ function DriverCard({
   driver: Driver; season: number; teamColor: string;
 }) {
   const code    = driver.code?.toUpperCase() ?? '';
-  const imgUrls = getDriverImageUrls(driver.first_name, driver.last_name, season, 500);
+  const autoUrls = getDriverImageUrls(driver.first_name, driver.last_name, season, 500);
+  const imgUrls = driver.image_url ? [driver.image_url, ...autoUrls] : autoUrls;
   const [urlIdx, setUrlIdx] = useState(0);
   useEffect(() => setUrlIdx(0), [driver.code, season]);
   const imgSrc = urlIdx < imgUrls.length ? imgUrls[urlIdx] : '';
@@ -432,6 +434,7 @@ interface ConstructorDetail {
   id: number;
   name: string;
   nationality?: string;
+  image_url?: string;
   season: number;
   total_points: number;
   wins: number;
@@ -606,6 +609,7 @@ export default function TeamDetailPage() {
             <TeamLogo
               teamName={detail.name}
               season={selectedSeason}
+              preferredUrl={detail.image_url}
               className="relative z-10 object-contain"
               style={{ maxHeight: 160, maxWidth: '55%', filter: 'drop-shadow(0 8px 32px rgba(0,0,0,0.5)) brightness(1.08)' }}
               fallbackLarge

@@ -45,6 +45,7 @@ class Driver(Base):
     last_name = Column(String(100))
     nationality = Column(String(100))
     date_of_birth = Column(Date, nullable=True)
+    image_url = Column(String(500), nullable=True)
     
     # Relationships
     lap_times = relationship("LapTime", back_populates="driver")
@@ -63,6 +64,7 @@ class Team(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     nationality = Column(String(100))
+    image_url = Column(String(500), nullable=True)
     
     # Relationships
     results = relationship("Result", back_populates="team")
@@ -308,3 +310,24 @@ class SessionStatus(Base):
     
     timestamp = Column(DateTime, nullable=False, index=True)
     status = Column(String(100))  # Started, Finalized, Ends, Aborted, etc.
+
+
+class SeasonDriverProfile(Base):
+    """Season-specific driver overrides (number/image)."""
+    __tablename__ = "season_driver_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    season_id = Column(Integer, ForeignKey("seasons.id"), nullable=False, index=True)
+    driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=False, index=True)
+    driver_number = Column(Integer, nullable=True)
+    image_url = Column(String(500), nullable=True)
+
+
+class SeasonTeamProfile(Base):
+    """Season-specific team image overrides."""
+    __tablename__ = "season_team_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    season_id = Column(Integer, ForeignKey("seasons.id"), nullable=False, index=True)
+    team_id = Column(Integer, ForeignKey("teams.id"), nullable=False, index=True)
+    image_url = Column(String(500), nullable=True)

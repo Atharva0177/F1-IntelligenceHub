@@ -6,7 +6,7 @@ from database.config import get_db
 from database.models import Race, Season, Circuit, Result, Driver, Team, LapTime, Session as DBSession, TelemetryData, RaceControlMessage, PitStop
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from data_pipeline import openf1_service
 
 router = APIRouter()
@@ -230,13 +230,51 @@ async def get_data_version(db: Session = Depends(get_db)):
 
 @router.get("/next-session")
 async def get_next_session(db: Session = Depends(get_db)):
-    """Return the next upcoming session.
+    """Return the active session (if live), otherwise the next upcoming session.
 
     Priority:
-      1) Upcoming local DB session
-      2) Upcoming OpenF1 online session fallback
+      1) Live or upcoming local DB session
+      2) Live or upcoming OpenF1 online session fallback
     """
+    def _session_duration_minutes(session_type: Optional[str]) -> int:
+        t = (session_type or "").strip().upper()
+        if t in {"RACE"}:
+            return 120
+        if t in {"SPRINT"}:
+            return 45
+        if t in {"SPRINT SHOOTOUT", "SPRINT_QUALIFYING"}:
+            return 45
+        if t in {"QUALIFYING", "Q"}:
+            return 60
+        if t in {"FP1", "FP2", "FP3", "PRACTICE 1", "PRACTICE 2", "PRACTICE 3", "P1", "P2", "P3"}:
+            return 60
+        return 60
+
     now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    live_row = (
+        db.query(DBSession, Race)
+        .join(Race, DBSession.race_id == Race.id)
+        .filter(DBSession.date.isnot(None), DBSession.date <= now)
+        .order_by(DBSession.date.desc())
+        .first()
+    )
+
+    if live_row:
+        session, race = live_row
+        duration_minutes = _session_duration_minutes(session.session_type)
+        session_end = session.date + timedelta(minutes=duration_minutes)
+        if now < session_end:
+            return {
+                "race_id": race.id,
+                "race_name": race.name,
+                "session_type": session.session_type,
+                "session_date": session.date.isoformat() + "Z",
+                "session_end": session_end.isoformat() + "Z",
+                "is_live": True,
+                "source": "db",
+            }
+
     row = (
         db.query(DBSession, Race)
         .join(Race, DBSession.race_id == Race.id)
@@ -246,11 +284,15 @@ async def get_next_session(db: Session = Depends(get_db)):
     )
     if row:
         session, race = row
+        duration_minutes = _session_duration_minutes(session.session_type)
+        session_end = session.date + timedelta(minutes=duration_minutes)
         return {
             "race_id": race.id,
             "race_name": race.name,
             "session_type": session.session_type,
             "session_date": session.date.isoformat() + "Z",
+            "session_end": session_end.isoformat() + "Z",
+            "is_live": False,
             "source": "db",
         }
 
@@ -262,6 +304,7 @@ async def get_next_session(db: Session = Depends(get_db)):
         except Exception:
             continue
 
+        live_candidates = []
         upcoming = []
         for s in sessions or []:
             date_start = s.get("date_start")
@@ -271,14 +314,28 @@ async def get_next_session(db: Session = Depends(get_db)):
                 start_dt = datetime.fromisoformat(date_start.replace("Z", "+00:00"))
             except ValueError:
                 continue
-            if start_dt > now_utc:
-                upcoming.append((start_dt, s))
+            duration_minutes = _session_duration_minutes(s.get("session_name") or s.get("session_type"))
+            end_dt = start_dt + timedelta(minutes=duration_minutes)
 
-        if not upcoming:
+            if start_dt <= now_utc < end_dt:
+                live_candidates.append((start_dt, end_dt, s))
+            elif start_dt > now_utc:
+                upcoming.append((start_dt, end_dt, s))
+
+        chosen = None
+        is_live = False
+        if live_candidates:
+            live_candidates.sort(key=lambda x: x[0], reverse=True)
+            chosen = live_candidates[0]
+            is_live = True
+        elif upcoming:
+            upcoming.sort(key=lambda x: x[0])
+            chosen = upcoming[0]
+
+        if not chosen:
             continue
 
-        upcoming.sort(key=lambda x: x[0])
-        _, next_session = upcoming[0]
+        start_dt, end_dt, next_session = chosen
 
         # Resolve race/meeting name as reliably as possible so the navbar can
         # show both race and session (not just session type).
@@ -312,7 +369,9 @@ async def get_next_session(db: Session = Depends(get_db)):
             "race_id": local_race.id if local_race else None,
             "race_name": race_name,
             "session_type": next_session.get("session_name") or next_session.get("session_type") or "Session",
-            "session_date": next_session.get("date_start"),
+            "session_date": start_dt.isoformat().replace("+00:00", "Z"),
+            "session_end": end_dt.isoformat().replace("+00:00", "Z"),
+            "is_live": is_live,
             "source": "openf1",
         }
 

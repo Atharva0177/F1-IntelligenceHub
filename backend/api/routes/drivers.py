@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database.config import get_db
-from database.models import Driver, Result, Race, Team, Season
+from database.models import Driver, Result, Race, Team, Season, SeasonDriverProfile
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -14,9 +14,11 @@ class DriverListSchema(BaseModel):
     id: int
     code: str
     number: Optional[int]
+    driver_number: Optional[int]
     first_name: str
     last_name: str
     nationality: Optional[str]
+    image_url: Optional[str]
     team_name: Optional[str]
     total_races: int
     total_points: float
@@ -34,6 +36,7 @@ class DriverDetailSchema(BaseModel):
     first_name: str
     last_name: str
     nationality: Optional[str]
+    image_url: Optional[str]
     date_of_birth: Optional[str]
     team_name: Optional[str]
     total_races: int
@@ -71,6 +74,10 @@ async def get_drivers(
     """
     from sqlalchemy import case, distinct
     
+    season_obj = None
+    if season:
+        season_obj = db.query(Season).filter(Season.year == season).first()
+
     # Query drivers with aggregated stats and team info
     query = db.query(
         Driver,
@@ -80,12 +87,17 @@ async def get_drivers(
     ).outerjoin(Result)
     
     # Filter by season if provided
-    if season:
+    if season_obj:
         query = query.join(Race, Result.race_id == Race.id).join(Season, Race.season_id == Season.id).filter(Season.year == season)
     
     drivers_query = query.group_by(Driver.id)
     
     drivers_data = drivers_query.offset(skip).limit(limit).all()
+
+    profile_map = {}
+    if season_obj:
+        profiles = db.query(SeasonDriverProfile).filter(SeasonDriverProfile.season_id == season_obj.id).all()
+        profile_map = {p.driver_id: p for p in profiles}
     
     result = []
     for driver, total_races, total_points, wins in drivers_data:
@@ -104,14 +116,19 @@ async def get_drivers(
         team_result = team_query.order_by(Race.date.desc()).first()
         
         team_name = team_result[2].name if team_result and len(team_result) > 2 else None
+        profile = profile_map.get(driver.id)
+        effective_number = profile.driver_number if profile and profile.driver_number is not None else driver.number
+        effective_image = profile.image_url if profile and profile.image_url else driver.image_url
         
         result.append({
             "id": driver.id,
             "code": driver.code,
-            "number": driver.number,
+            "number": effective_number,
+            "driver_number": effective_number,
             "first_name": driver.first_name or "",
             "last_name": driver.last_name or "",
             "nationality": driver.nationality,
+            "image_url": effective_image,
             "team_name": team_name,
             "total_races": total_races or 0,
             "total_points": float(total_points or 0.0),
@@ -122,7 +139,7 @@ async def get_drivers(
 
 
 @router.get("/{driver_id}", response_model=DriverDetailSchema)
-async def get_driver_details(driver_id: int, db: Session = Depends(get_db)):
+async def get_driver_details(driver_id: int, season: Optional[int] = None, db: Session = Depends(get_db)):
     """
     Get detailed information about a specific driver
     """
@@ -131,6 +148,8 @@ async def get_driver_details(driver_id: int, db: Session = Depends(get_db)):
     if not driver:
         raise HTTPException(status_code=404, detail="Driver not found")
     
+    season_obj = db.query(Season).filter(Season.year == season).first() if season else None
+
     # Get statistics
     from sqlalchemy import case
     stats = db.query(
@@ -138,7 +157,12 @@ async def get_driver_details(driver_id: int, db: Session = Depends(get_db)):
         func.sum(Result.points).label('total_points'),
         func.sum(case((Result.position == 1, 1), else_=0)).label('wins'),
         func.sum(case((Result.position <= 3, 1), else_=0)).label('podiums')
-    ).filter(Result.driver_id == driver_id).first()
+    ).filter(Result.driver_id == driver_id)
+
+    if season_obj:
+        stats = stats.join(Race, Result.race_id == Race.id).filter(Race.season_id == season_obj.id)
+
+    stats = stats.first()
     
     # Get the driver's most recent team
     team_result = db.query(Result, Race, Team).join(
@@ -147,18 +171,34 @@ async def get_driver_details(driver_id: int, db: Session = Depends(get_db)):
         Team, Result.team_id == Team.id
     ).filter(
         Result.driver_id == driver_id
-    ).order_by(Race.date.desc()).first()
+    )
+
+    if season_obj:
+        team_result = team_result.filter(Race.season_id == season_obj.id)
+
+    team_result = team_result.order_by(Race.date.desc()).first()
+
+    profile = None
+    if season_obj:
+        profile = db.query(SeasonDriverProfile).filter(
+            SeasonDriverProfile.season_id == season_obj.id,
+            SeasonDriverProfile.driver_id == driver.id,
+        ).first()
+
+    effective_number = profile.driver_number if profile and profile.driver_number is not None else driver.number
+    effective_image = profile.image_url if profile and profile.image_url else driver.image_url
     
     team_name = team_result[2].name if team_result and len(team_result) > 2 else None
     
     return {
         "id": driver.id,
         "code": driver.code,
-        "number": driver.number,
-        "driver_number": driver.number,
+        "number": effective_number,
+        "driver_number": effective_number,
         "first_name": driver.first_name or "",
         "last_name": driver.last_name or "",
         "nationality": driver.nationality,
+        "image_url": effective_image,
         "date_of_birth": driver.date_of_birth.isoformat() if driver.date_of_birth else None,
         "team_name": team_name,
         "total_races": stats.total_races or 0,

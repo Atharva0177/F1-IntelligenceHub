@@ -50,7 +50,8 @@ function getFlag(nat?: string): string {
 }
 
 function DriverCard({ driver, index, selectedSeason }: { driver: Driver; index: number; selectedSeason: number }) {
-  const imgUrls = getDriverImageUrls(driver.first_name, driver.last_name, selectedSeason, 500);
+  const autoUrls = getDriverImageUrls(driver.first_name, driver.last_name, selectedSeason, 500);
+  const imgUrls = driver.image_url ? [driver.image_url, ...autoUrls] : autoUrls;
   const [urlIdx, setUrlIdx] = useState(0);
   useEffect(() => setUrlIdx(0), [driver.code, selectedSeason]);
   const imgSrc = urlIdx < imgUrls.length ? imgUrls[urlIdx] : '';

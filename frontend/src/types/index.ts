@@ -19,6 +19,7 @@ export interface Driver {
   last_name: string;
   nationality?: string;
   date_of_birth?: string;
+  image_url?: string;
   team_name?: string;
   total_races?: number;
   total_points?: number;
@@ -30,6 +31,7 @@ export interface Team {
   id: number;
   name: string;
   nationality?: string;
+  image_url?: string;
 }
 
 export interface Race {
@@ -189,6 +191,7 @@ export interface ConstructorDetail {
   id: number;
   name: string;
   nationality?: string;
+  image_url?: string;
   season: number;
   total_points: number;
   wins: number;
@@ -303,4 +306,140 @@ export interface ChartProps {
   data: any[];
   width?: number | string;
   height?: number;
+}
+
+// Admin
+export interface AdminRace {
+  id: number;
+  season_year: number;
+  round_number?: number;
+  name: string;
+  date?: string;
+  time?: string;
+  event_name?: string;
+  official_name?: string;
+  circuit_id: number;
+  circuit_name: string;
+  circuit_country?: string;
+}
+
+export interface AdminRacePayload {
+  season_year: number;
+  circuit_id: number;
+  name: string;
+  round_number?: number;
+  date?: string;
+  time?: string;
+  event_name?: string;
+  official_name?: string;
+}
+
+export interface AdminImageEntry {
+  id: number;
+  code?: string;
+  name?: string;
+  first_name?: string;
+  last_name?: string;
+  image_url?: string | null;
+}
+
+export interface AdminStats {
+  entity_counts: Record<string, number>;
+  coverage: {
+    completed_races: number;
+    total_races: number;
+    completion_ratio: number;
+    races_with_sessions: number;
+    races_with_results: number;
+    sessions_with_laps: number;
+    sessions_with_telemetry: number;
+    sessions_with_weather: number;
+    sessions_with_positions: number;
+    sessions_with_race_control: number;
+  };
+  data_density: {
+    avg_laps_per_session: number;
+    avg_telemetry_points_per_session: number;
+    qualifying_rows: number;
+  };
+  session_type_breakdown: Array<{
+    session_type: string;
+    count: number;
+    ratio: number;
+  }>;
+  top_lists: {
+    drivers: Array<{ id: number; code?: string; name: string; points: number; results: number; wins: number }>;
+    teams: Array<{ id: number; name: string; points: number; results: number; wins: number }>;
+  };
+  top_entities: {
+    driver?: { id: number; code?: string; name: string; points: number } | null;
+    team?: { id: number; name: string; points: number } | null;
+  };
+  latest_race_date?: string | null;
+  recent_races: Array<{
+    race_id: number;
+    season_year: number;
+    round_number?: number;
+    race_name: string;
+    race_date?: string | null;
+    circuit_name?: string | null;
+  }>;
+  season_breakdown: Array<{
+    season_year: number;
+    race_count: number;
+    session_count: number;
+    result_rows: number;
+    completed_races: number;
+    completion_ratio: number;
+  }>;
+}
+
+export interface AdminSession {
+  id: number;
+  race_id: number;
+  race_name: string;
+  season_year: number;
+  session_type: string;
+  date?: string;
+}
+
+export interface AdminSessionUpsertPayload {
+  race_id: number;
+  session_type: string;
+  date?: string;
+}
+
+export interface AdminSyncStatus {
+  running: boolean;
+  season_year?: number;
+  status: 'idle' | 'running' | 'completed' | 'failed' | string;
+  started_at?: string;
+  finished_at?: string;
+  exit_code?: number;
+  command?: string;
+  output_tail?: string;
+}
+
+export interface AdminSeasonSummary {
+  year: number;
+  race_count: number;
+  session_count: number;
+}
+
+export interface SeasonalDriverProfile {
+  id: number;
+  code?: string;
+  first_name?: string;
+  last_name?: string;
+  default_number?: number;
+  default_image_url?: string;
+  season_number?: number;
+  season_image_url?: string;
+}
+
+export interface SeasonalTeamProfile {
+  id: number;
+  name: string;
+  default_image_url?: string;
+  season_image_url?: string;
 }

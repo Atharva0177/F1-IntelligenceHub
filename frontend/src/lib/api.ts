@@ -16,6 +16,16 @@ import type {
   ConstructorDetail,
   H2HResponse,
   CircuitGuide,
+  AdminRace,
+  AdminRacePayload,
+  AdminImageEntry,
+  AdminStats,
+  AdminSession,
+  AdminSessionUpsertPayload,
+  AdminSyncStatus,
+  AdminSeasonSummary,
+  SeasonalDriverProfile,
+  SeasonalTeamProfile,
 } from '@/types';
 
 // Create axios instance
@@ -129,8 +139,9 @@ export const api = {
     return response.data;
   },
 
-  async getDriverDetail(driverId: number): Promise<Driver> {
-    const response = await apiClient.get(`/api/drivers/${driverId}`);
+  async getDriverDetail(driverId: number, season?: number): Promise<Driver> {
+    const params = season ? { season } : {};
+    const response = await apiClient.get(`/api/drivers/${driverId}`, { params });
     return response.data;
   },
 
@@ -205,14 +216,15 @@ export const api = {
     return response.data;
   },
 
-  async getNextSession(): Promise<{ race_id?: number | null; race_name: string; session_type: string; session_date: string; source?: string } | null> {
+  async getNextSession(): Promise<{ race_id?: number | null; race_name: string; session_type: string; session_date: string; session_end?: string; is_live?: boolean; source?: string } | null> {
     const response = await apiClient.get('/api/races/next-session');
     return response.data ?? null;
   },
 
   // Constructors
-  async getConstructors(): Promise<{ id: number; name: string; nationality?: string }[]> {
-    const response = await apiClient.get('/api/constructors');
+  async getConstructors(season?: number): Promise<{ id: number; name: string; nationality?: string; image_url?: string }[]> {
+    const params = season ? { season } : {};
+    const response = await apiClient.get('/api/constructors', { params });
     return response.data;
   },
 
@@ -279,6 +291,137 @@ export const api = {
 
   async getDataVersion(): Promise<{ version: number }> {
     const response = await apiClient.get('/api/races/data-version');
+    return response.data;
+  },
+
+  // Admin
+  async getAdminAuthStatus(): Promise<{ authenticated: boolean }> {
+    const response = await apiClient.get('/api/admin/auth/status');
+    return response.data;
+  },
+
+  async adminLogin(password: string): Promise<{ authenticated: boolean }> {
+    const response = await apiClient.post('/api/admin/auth/login', { password });
+    return response.data;
+  },
+
+  async adminLogout(): Promise<{ authenticated: boolean }> {
+    const response = await apiClient.post('/api/admin/auth/logout');
+    return response.data;
+  },
+
+  async getAdminStats(): Promise<AdminStats> {
+    const response = await apiClient.get('/api/admin/stats');
+    return response.data;
+  },
+
+  async getAdminRaces(season?: number): Promise<AdminRace[]> {
+    const params = season ? { season } : {};
+    const response = await apiClient.get('/api/admin/races', { params });
+    return response.data;
+  },
+
+  async createAdminRace(payload: AdminRacePayload): Promise<AdminRace> {
+    const response = await apiClient.post('/api/admin/races', payload);
+    return response.data;
+  },
+
+  async updateAdminRace(raceId: number, payload: Partial<AdminRacePayload>): Promise<AdminRace> {
+    const response = await apiClient.patch(`/api/admin/races/${raceId}`, payload);
+    return response.data;
+  },
+
+  async deleteAdminRace(raceId: number, force = false): Promise<{ deleted: boolean; race_id: number; force?: boolean }> {
+    const response = await apiClient.delete(`/api/admin/races/${raceId}`, { params: { force } });
+    return response.data;
+  },
+
+  async getAdminSeasons(): Promise<AdminSeasonSummary[]> {
+    const response = await apiClient.get('/api/admin/seasons');
+    return response.data;
+  },
+
+  async deleteAdminSeason(seasonYear: number, force = false): Promise<{ deleted: boolean; season_year: number; force?: boolean }> {
+    const response = await apiClient.delete(`/api/admin/seasons/${seasonYear}`, { params: { force } });
+    return response.data;
+  },
+
+  async getAdminSessions(season?: number, raceId?: number): Promise<AdminSession[]> {
+    const params: Record<string, number> = {};
+    if (season) params.season = season;
+    if (raceId) params.race_id = raceId;
+    const response = await apiClient.get('/api/admin/sessions', { params });
+    return response.data;
+  },
+
+  async deleteAdminSession(sessionId: number, force = false): Promise<{ deleted: boolean; session_id: number; force?: boolean }> {
+    const response = await apiClient.delete(`/api/admin/sessions/${sessionId}`, { params: { force } });
+    return response.data;
+  },
+
+  async upsertAdminSession(payload: AdminSessionUpsertPayload): Promise<AdminSession> {
+    const response = await apiClient.post('/api/admin/sessions/upsert', payload);
+    return response.data;
+  },
+
+  async getAdminSyncStatus(): Promise<AdminSyncStatus> {
+    const response = await apiClient.get('/api/admin/sync/status');
+    return response.data;
+  },
+
+  async startAdminSync(season_year?: number): Promise<AdminSyncStatus> {
+    const response = await apiClient.post('/api/admin/sync/start', { season_year });
+    return response.data;
+  },
+
+  async getAdminDriverImages(): Promise<AdminImageEntry[]> {
+    const response = await apiClient.get('/api/admin/drivers/images');
+    return response.data;
+  },
+
+  async updateAdminDriverImage(driverId: number, image_url?: string): Promise<AdminImageEntry> {
+    const response = await apiClient.patch(`/api/admin/drivers/${driverId}/image`, {
+      image_url: image_url ?? null,
+    });
+    return response.data;
+  },
+
+  async getAdminTeamImages(): Promise<AdminImageEntry[]> {
+    const response = await apiClient.get('/api/admin/teams/images');
+    return response.data;
+  },
+
+  async updateAdminTeamImage(teamId: number, image_url?: string): Promise<AdminImageEntry> {
+    const response = await apiClient.patch(`/api/admin/teams/${teamId}/image`, {
+      image_url: image_url ?? null,
+    });
+    return response.data;
+  },
+
+  async getSeasonalDriverProfiles(season: number): Promise<SeasonalDriverProfile[]> {
+    const response = await apiClient.get('/api/admin/seasonal/drivers', { params: { season } });
+    return response.data;
+  },
+
+  async updateSeasonalDriverProfile(driverId: number, season_year: number, payload: { driver_number?: number; image_url?: string }): Promise<any> {
+    const response = await apiClient.patch(`/api/admin/seasonal/drivers/${driverId}`, {
+      season_year,
+      driver_number: payload.driver_number,
+      image_url: payload.image_url ?? null,
+    });
+    return response.data;
+  },
+
+  async getSeasonalTeamProfiles(season: number): Promise<SeasonalTeamProfile[]> {
+    const response = await apiClient.get('/api/admin/seasonal/teams', { params: { season } });
+    return response.data;
+  },
+
+  async updateSeasonalTeamProfile(teamId: number, season_year: number, payload: { image_url?: string }): Promise<any> {
+    const response = await apiClient.patch(`/api/admin/seasonal/teams/${teamId}`, {
+      season_year,
+      image_url: payload.image_url ?? null,
+    });
     return response.data;
   },
 };

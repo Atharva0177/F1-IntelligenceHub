@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 from database.config import get_db
-from database.models import Result, Race, Season, Driver, Team
+from database.models import Result, Race, Season, Driver, Team, SeasonTeamProfile
 from typing import List, Optional
 from pydantic import BaseModel
 
@@ -18,6 +18,7 @@ class ConstructorSummary(BaseModel):
     id: int
     name: str
     nationality: Optional[str] = None
+    image_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -50,6 +51,7 @@ class ConstructorDetailResponse(BaseModel):
     id: int
     name: str
     nationality: Optional[str] = None
+    image_url: Optional[str] = None
     season: int
     total_points: float
     wins: int
@@ -62,10 +64,26 @@ class ConstructorDetailResponse(BaseModel):
 
 
 @router.get("", response_model=List[ConstructorSummary])
-async def get_constructors(db: Session = Depends(get_db)):
+async def get_constructors(season: Optional[int] = None, db: Session = Depends(get_db)):
     """Get all constructors (teams) in the database."""
     teams = db.query(Team).order_by(Team.name).all()
-    return [{"id": t.id, "name": t.name, "nationality": t.nationality} for t in teams]
+
+    profile_map = {}
+    if season:
+        season_obj = db.query(Season).filter(Season.year == season).first()
+        if season_obj:
+            profiles = db.query(SeasonTeamProfile).filter(SeasonTeamProfile.season_id == season_obj.id).all()
+            profile_map = {p.team_id: p for p in profiles}
+
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "nationality": t.nationality,
+            "image_url": (profile_map.get(t.id).image_url if profile_map.get(t.id) and profile_map.get(t.id).image_url else t.image_url),
+        }
+        for t in teams
+    ]
 
 
 @router.get("/{team_id}", response_model=ConstructorDetailResponse)
@@ -97,6 +115,12 @@ async def get_constructor_detail(
         season_obj = db.query(Season).filter(Season.year == latest).first()
 
     season_year = season_obj.year
+
+    profile = db.query(SeasonTeamProfile).filter(
+        SeasonTeamProfile.season_id == season_obj.id,
+        SeasonTeamProfile.team_id == team.id,
+    ).first()
+    effective_image_url = profile.image_url if profile and profile.image_url else team.image_url
 
     # Per-driver stats for this season
     driver_rows = db.query(
@@ -154,6 +178,7 @@ async def get_constructor_detail(
         "id": team.id,
         "name": team.name,
         "nationality": team.nationality,
+        "image_url": effective_image_url,
         "season": season_year,
         "total_points": total_points,
         "wins": wins,

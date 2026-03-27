@@ -5,10 +5,57 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from database.config import get_db
-from database.models import LapTime, Driver, Session as DBSession, Result, Qualifying
+from database.models import LapTime, Driver, Session as DBSession, Result, Qualifying, Race
 
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+def _resolve_team_name(
+    db: Session,
+    race_id: int,
+    driver_id: int,
+    season_id: Optional[int],
+) -> str:
+    """Resolve constructor name for a driver in a session context.
+
+    Fallback order:
+    1) Result row from the same race
+    2) Latest result row from the same season
+    3) Latest result row across all seasons
+    """
+    same_race_result = db.query(Result).filter(
+        Result.race_id == race_id,
+        Result.driver_id == driver_id,
+    ).first()
+    if same_race_result and same_race_result.team:
+        return same_race_result.team.name
+
+    if season_id is not None:
+        same_season_result = (
+            db.query(Result)
+            .join(Race, Result.race_id == Race.id)
+            .filter(
+                Result.driver_id == driver_id,
+                Race.season_id == season_id,
+            )
+            .order_by(Race.date.desc().nullslast(), Race.round_number.desc().nullslast(), Result.id.desc())
+            .first()
+        )
+        if same_season_result and same_season_result.team:
+            return same_season_result.team.name
+
+    latest_result = (
+        db.query(Result)
+        .join(Race, Result.race_id == Race.id)
+        .filter(Result.driver_id == driver_id)
+        .order_by(Race.date.desc().nullslast(), Race.round_number.desc().nullslast(), Result.id.desc())
+        .first()
+    )
+    if latest_result and latest_result.team:
+        return latest_result.team.name
+
+    return "Unknown"
 
 
 @router.get("/{session_id}/lap-times", response_model=List[dict])
@@ -68,6 +115,9 @@ async def get_session_results(
     session = db.query(DBSession).filter(DBSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    race = db.query(Race).filter(Race.id == session.race_id).first()
+    season_id = race.season_id if race else None
     
     session_type = session.session_type
     
@@ -105,13 +155,12 @@ async def get_session_results(
             # Helper to get team name (fallback to finding it from Race Results if possible)
             results_data = []
             for q in qualifying_results:
-                # Find team from Race Result
-                race_result = db.query(Result).filter(
-                    Result.race_id == session.race_id,
-                    Result.driver_id == q.driver_id
-                ).first()
-                
-                team_name = race_result.team.name if race_result else "Unknown"
+                team_name = _resolve_team_name(
+                    db=db,
+                    race_id=session.race_id,
+                    driver_id=q.driver_id,
+                    season_id=season_id,
+                )
                 
                 # Determine best time
                 best_time = q.q3_time or q.q2_time or q.q1_time
@@ -162,12 +211,12 @@ async def get_session_results(
         lap = data["lap_obj"]
         driver = lap.driver
         
-        # Find team (again, try from Race Result)
-        race_result = db.query(Result).filter(
-            Result.race_id == session.race_id,
-            Result.driver_id == driver_id
-        ).first()
-        team_name = race_result.team.name if race_result else "Unknown"
+        team_name = _resolve_team_name(
+            db=db,
+            race_id=session.race_id,
+            driver_id=driver_id,
+            season_id=season_id,
+        )
         
         results_data.append({
             "position": i,

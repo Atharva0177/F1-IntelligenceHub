@@ -155,6 +155,7 @@ interface TeamEntry {
   id: number;
   name: string;
   drivers: Driver[];
+  image_url?: string;
 }
 
 /* ── Team badge icon (SVG fallback) ─────────────────────────────── */
@@ -256,7 +257,16 @@ function TeamCard({
 
       {/* Top-right: shield badge */}
       <div className="absolute top-3 right-3 z-10 w-9 h-9 rounded-full bg-white/15 flex items-center justify-center backdrop-blur-sm border border-white/20">
-        <TeamBadge />
+        {team.image_url ? (
+          <img
+            src={team.image_url}
+            alt=""
+            className="w-6 h-6 object-contain"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+          />
+        ) : (
+          <TeamBadge />
+        )}
       </div>
 
       {/* Hover overlay */}
@@ -272,7 +282,7 @@ export default function TeamsPage() {
   const [availableYears, setAvailableYears]   = useState<number[]>([]);
   const [selectedSeason, setSelectedSeason]   = useState<number>(0);
   const [teams, setTeams]                     = useState<TeamEntry[]>([]);
-  const [constructorMap, setConstructorMap]   = useState<Record<string, number>>({});
+  const [constructorMap, setConstructorMap]   = useState<Record<string, { id: number; image_url?: string }>>({});
   const [standingsMap, setStandingsMap]       = useState<Record<string, ConstructorStanding>>({});
   const [loading, setLoading]                 = useState(true);
 
@@ -301,12 +311,12 @@ export default function TeamsPage() {
 
     Promise.all([
       api.getDrivers(selectedSeason),
-      api.getConstructors(),
+      api.getConstructors(selectedSeason),
       api.getConstructorStandings(selectedSeason).catch(() => [] as ConstructorStanding[]),
     ]).then(([drivers, constructors, standings]) => {
       /* Build constructor ID map */
-      const cMap: Record<string, number> = {};
-      constructors.forEach((c) => { cMap[c.name] = c.id; });
+      const cMap: Record<string, { id: number; image_url?: string }> = {};
+      constructors.forEach((c) => { cMap[c.name] = { id: c.id, image_url: c.image_url }; });
       setConstructorMap(cMap);
 
       /* Build standings map */
@@ -326,17 +336,18 @@ export default function TeamsPage() {
       const orderedTeams: TeamEntry[] = [];
 
       /* Exact DB name match first, then fuzzy — avoids picking wrong team */
-      const findId = (teamName: string) =>
+      const findMeta = (teamName: string) =>
         cMap[teamName]
         ?? Object.entries(cMap).find(([k]) =>
             k.toLowerCase().includes(teamName.toLowerCase()) ||
             teamName.toLowerCase().includes(k.toLowerCase())
           )?.[1]
-        ?? 0;
+        ?? { id: 0 };
 
       /* Add all teams */
       Object.entries(byTeam).forEach(([teamName, teamDrivers]) => {
-        orderedTeams.push({ id: findId(teamName), name: teamName, drivers: teamDrivers });
+        const meta = findMeta(teamName);
+        orderedTeams.push({ id: meta.id, name: teamName, drivers: teamDrivers, image_url: meta.image_url });
       });
 
       /* Sort by championship position if available, else keep insertion order */

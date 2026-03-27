@@ -3029,8 +3029,11 @@ export default function RaceDetailPage() {
                         />
                         <YAxis
                           stroke="#888"
-                          domain={[0, 8]}
-                          width={25}
+                          domain={[0, "auto"]}
+                          width={50}
+                          tickFormatter={(value: number) =>
+                            value >= 1000 ? `${Math.round(value / 1000)}k` : `${Math.round(value)}`
+                          }
                         />
                         <Tooltip
                           contentStyle={{
@@ -3038,12 +3041,16 @@ export default function RaceDetailPage() {
                             border: "1px solid #333",
                           }}
                           labelStyle={{ color: "#fff" }}
+                          formatter={(value: any) => [
+                            `${Math.round(Number(value) || 0).toLocaleString()}`,
+                            "RPM",
+                          ]}
                         />
                         <Legend />
                         <Line
                           data={telemetryData1}
-                          type="stepAfter"
-                          dataKey="gear"
+                          type="monotone"
+                          dataKey="rpm"
                           stroke={driverColors[telemetryDriver1] || "#00D9FF"}
                           name={telemetryDriver1}
                           strokeDasharray={getDriverDash(telemetryDriver1)}
@@ -3053,8 +3060,8 @@ export default function RaceDetailPage() {
                         />
                         <Line
                           data={telemetryData2}
-                          type="stepAfter"
-                          dataKey="gear"
+                          type="monotone"
+                          dataKey="rpm"
                           stroke={driverColors[telemetryDriver2] || "#FF1E1E"}
                           name={telemetryDriver2}
                           strokeDasharray={getDriverDash(telemetryDriver2)}
