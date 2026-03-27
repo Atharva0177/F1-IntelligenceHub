@@ -34,6 +34,8 @@ const apiClient: AxiosInstance = axios.create({
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
+    // Required for ngrok-hosted sites so API requests bypass the browser warning interstitial.
+    'ngrok-skip-browser-warning': '1',
   },
 });
 
@@ -218,7 +220,16 @@ export const api = {
 
   async getNextSession(): Promise<{ race_id?: number | null; race_name: string; session_type: string; session_date: string; session_end?: string; is_live?: boolean; source?: string } | null> {
     const response = await apiClient.get('/api/races/next-session');
-    return response.data ?? null;
+    const data = response.data;
+    if (!data || typeof data !== 'object') {
+      return null;
+    }
+
+    if (typeof data.session_date !== 'string' || typeof data.session_type !== 'string' || typeof data.race_name !== 'string') {
+      return null;
+    }
+
+    return data;
   },
 
   // Constructors
