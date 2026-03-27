@@ -95,6 +95,49 @@ function countryTag(name: string) {
     .toUpperCase();
 }
 
+function countryCode(name: string): string | null {
+  const n = (name || '').toLowerCase();
+  if (n.includes('japan')) return 'jp';
+  if (n.includes('australia')) return 'au';
+  if (n.includes('bahrain')) return 'bh';
+  if (n.includes('saudi')) return 'sa';
+  if (n.includes('china')) return 'cn';
+  if (n.includes('miami') || n.includes('united states') || n.includes('las vegas')) return 'us';
+  if (n.includes('imola') || n.includes('italy') || n.includes('monza')) return 'it';
+  if (n.includes('monaco')) return 'mc';
+  if (n.includes('canada')) return 'ca';
+  if (n.includes('spain')) return 'es';
+  if (n.includes('austria')) return 'at';
+  if (n.includes('british') || n.includes('silverstone')) return 'gb';
+  if (n.includes('hungary')) return 'hu';
+  if (n.includes('belgium')) return 'be';
+  if (n.includes('dutch') || n.includes('netherlands')) return 'nl';
+  if (n.includes('singapore')) return 'sg';
+  if (n.includes('mexico')) return 'mx';
+  if (n.includes('brazil') || n.includes('sao paulo')) return 'br';
+  if (n.includes('qatar')) return 'qa';
+  if (n.includes('abu dhabi')) return 'ae';
+  return null;
+}
+
+function normalizeSessionLabel(sessionType: string) {
+  const t = (sessionType || '').trim().toUpperCase();
+  if (t === 'FP1') return 'PRACTICE 1';
+  if (t === 'FP2') return 'PRACTICE 2';
+  if (t === 'FP3') return 'PRACTICE 3';
+  if (t === 'Q') return 'QUALIFYING';
+  return t;
+}
+
+function formatUpcomingDuration(ms: number) {
+  const totalSecs = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(hours)} h ${pad(mins)} m ${pad(secs)} s`;
+}
+
 export default function NextSessionCountdown() {
   const next = useNextSession();
   const startDiff = useCountdown(next?.session_date);
@@ -125,7 +168,9 @@ export default function NextSessionCountdown() {
   const { primary } = formatDiff(startDiff);
   const isImminent = startDiff < 60 * 60 * 1000; // < 1 hour
   const sessionLabel = next.session_type;
+  const sessionDisplay = normalizeSessionLabel(sessionLabel);
   const hasRaceLink = typeof next.race_id === 'number' && next.race_id > 0;
+  const cc = countryCode(next.race_name);
 
   if (isLive) {
     const liveRemainingMs = next.session_end ? endDiff : 0;
@@ -170,23 +215,29 @@ export default function NextSessionCountdown() {
 
   const content = (
     <>
-      {/* Pulsing dot — red when imminent, green otherwise */}
-      <span
-        className={`w-1.5 h-1.5 rounded-full animate-pulse flex-shrink-0 ${
-          isImminent ? 'bg-racing-red-500' : 'bg-track-green'
-        }`}
-      />
-
-      <div className="flex flex-col leading-none">
-        {/* Race + session label */}
-        <span className="text-[10px] text-gray-500 font-medium truncate max-w-[160px]">
-          {shortName(next.race_name)} · {sessionLabel}
-        </span>
-        {/* Countdown */}
-        <span className={`text-xs font-mono font-bold tabular-nums ${isImminent ? 'text-racing-red-400' : 'text-white'}`}>
-          {primary}
-        </span>
+      <div className="w-8 h-5 rounded-full bg-white border border-slate-300/80 overflow-hidden flex items-center justify-center shadow-inner flex-shrink-0">
+        {cc ? (
+          <img
+            src={`https://flagcdn.com/w40/${cc}.png`}
+            alt={`${countryTag(next.race_name)} flag`}
+            className="h-full w-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <span className="text-[11px]">🏁</span>
+        )}
       </div>
+
+      <div className="flex flex-col leading-none min-w-[92px]">
+        <span className="text-[9px] tracking-wider text-blue-100/85 font-bold uppercase">{countryTag(next.race_name)}</span>
+        <span className="text-[12px] font-black text-white uppercase tracking-tight">{sessionDisplay}</span>
+      </div>
+
+      <div className="h-6 w-px bg-white/25 mx-1" />
+
+      <span className={`text-[13px] font-black font-mono tabular-nums tracking-tight ${isImminent ? 'text-yellow-300' : 'text-white'}`}>
+        {formatUpcomingDuration(startDiff) || primary}
+      </span>
     </>
   );
 
@@ -194,7 +245,7 @@ export default function NextSessionCountdown() {
     return (
       <Link
         href={`/races/${next.race_id}`}
-        className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700 hover:border-carbon-500 transition-colors group"
+        className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-slate-800/95 via-slate-900/95 to-slate-800/95 border border-sky-300/20 shadow-[0_0_0_1px_rgba(255,255,255,0.05)_inset] hover:brightness-110 transition-all group"
       >
         {content}
       </Link>
@@ -202,7 +253,7 @@ export default function NextSessionCountdown() {
   }
 
   return (
-    <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-full bg-carbon-800/60 border border-carbon-700">
+    <div className="hidden md:flex items-center gap-2.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-slate-800/95 via-slate-900/95 to-slate-800/95 border border-sky-300/20 shadow-[0_0_0_1px_rgba(255,255,255,0.05)_inset]">
       {content}
     </div>
   );

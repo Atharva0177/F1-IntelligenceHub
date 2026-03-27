@@ -5,8 +5,8 @@ WORKDIR /app
 # Copy package files first for better layer caching
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --prefer-offline
+# Install dependencies (skip audit/fund to reduce network stalls in container builds)
+RUN npm ci --prefer-offline --no-audit --no-fund --fetch-retries=5 --fetch-retry-maxtimeout=120000
 
 # Copy application code
 COPY . .
