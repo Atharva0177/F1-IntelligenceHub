@@ -12,6 +12,21 @@ import type {
   SeasonalTeamProfile,
 } from '@/types';
 
+function extractApiError(err: any): string {
+  const detail = err?.response?.data?.detail;
+  if (!detail) return '';
+  if (typeof detail === 'string') return detail;
+  // Pydantic v2 returns an array of {loc, msg, type} objects
+  if (Array.isArray(detail)) {
+    return detail.map((e: any) => {
+      const loc = Array.isArray(e.loc) ? e.loc.filter((l: any) => l !== 'body').join('.') : '';
+      return loc ? `${loc}: ${e.msg}` : e.msg;
+    }).join(' | ');
+  }
+  if (typeof detail === 'object' && detail.message) return detail.message;
+  return JSON.stringify(detail);
+}
+
 function StatCard({ label, value, accent }: { label: string; value: string | number; accent: string }) {
   return (
     <div className="rounded-xl border border-carbon-700 bg-carbon-900/70 p-4">
@@ -277,7 +292,7 @@ export default function AdminPage() {
       await loadSeasonalAssets(selectedSeasonYear);
       setMessage({ type: 'ok', text: 'Seasonal driver profile saved.' });
     } catch (err: any) {
-      setMessage({ type: 'error', text: err?.response?.data?.detail || 'Failed to save driver profile.' });
+      setMessage({ type: 'error', text: extractApiError(err) || 'Failed to save driver profile.' });
     } finally {
       setBusy(false);
     }
@@ -293,7 +308,7 @@ export default function AdminPage() {
       await loadSeasonalAssets(selectedSeasonYear);
       setMessage({ type: 'ok', text: 'Seasonal team profile saved.' });
     } catch (err: any) {
-      setMessage({ type: 'error', text: err?.response?.data?.detail || 'Failed to save team profile.' });
+      setMessage({ type: 'error', text: extractApiError(err) || 'Failed to save team profile.' });
     } finally {
       setBusy(false);
     }

@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS drivers (
     last_name VARCHAR(100),
     nationality VARCHAR(100),
     date_of_birth DATE,
-    image_url VARCHAR(500)
+    image_url TEXT
 );
 
 CREATE INDEX idx_drivers_code ON drivers(code);
@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS teams (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     nationality VARCHAR(100),
-    image_url VARCHAR(500)
+    image_url TEXT
 );
 
 -- Races table
@@ -164,17 +164,17 @@ ALTER TABLE IF EXISTS results
 ADD COLUMN IF NOT EXISTS is_sprint BOOLEAN NOT NULL DEFAULT FALSE;
 
 ALTER TABLE IF EXISTS drivers
-ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
+ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 ALTER TABLE IF EXISTS teams
-ADD COLUMN IF NOT EXISTS image_url VARCHAR(500);
+ADD COLUMN IF NOT EXISTS image_url TEXT;
 
 CREATE TABLE IF NOT EXISTS season_driver_profiles (
     id SERIAL PRIMARY KEY,
     season_id INTEGER NOT NULL REFERENCES seasons(id),
     driver_id INTEGER NOT NULL REFERENCES drivers(id),
     driver_number INTEGER,
-    image_url VARCHAR(500)
+    image_url TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_season_driver_profiles_unique
@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS season_team_profiles (
     id SERIAL PRIMARY KEY,
     season_id INTEGER NOT NULL REFERENCES seasons(id),
     team_id INTEGER NOT NULL REFERENCES teams(id),
-    image_url VARCHAR(500)
+    image_url TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_season_team_profiles_unique

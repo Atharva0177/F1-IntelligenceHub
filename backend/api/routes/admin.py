@@ -166,7 +166,7 @@ class AdminRaceUpdateRequest(BaseModel):
 
 
 class ImageUpdateRequest(BaseModel):
-    image_url: Optional[str] = Field(default=None, max_length=500)
+    image_url: Optional[str] = None
 
 
 class AdminSessionSchema(BaseModel):
@@ -216,8 +216,8 @@ class SeasonalDriverProfileSchema(BaseModel):
 
 class SeasonalDriverProfileUpdateRequest(BaseModel):
     season_year: int = Field(..., ge=1950, le=2100)
-    driver_number: Optional[int] = Field(default=None, ge=0, le=99)
-    image_url: Optional[str] = Field(default=None, max_length=500)
+    driver_number: Optional[int] = Field(default=None, ge=0, le=999)
+    image_url: Optional[str] = None
 
 
 class SeasonalTeamProfileSchema(BaseModel):
@@ -229,7 +229,7 @@ class SeasonalTeamProfileSchema(BaseModel):
 
 class SeasonalTeamProfileUpdateRequest(BaseModel):
     season_year: int = Field(..., ge=1950, le=2100)
-    image_url: Optional[str] = Field(default=None, max_length=500)
+    image_url: Optional[str] = None
 
 
 _sync_state_lock = threading.Lock()
